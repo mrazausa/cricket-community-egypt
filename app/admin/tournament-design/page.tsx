@@ -187,6 +187,8 @@ export default function TournamentDesignAdmin() {
     >
       Save Tournament Settings
     </button>
+        </div>
+    )}
   </div>
-)}
+  );
 }

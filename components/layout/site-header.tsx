@@ -216,7 +216,7 @@ export default function SiteHeader() {
             {logoUrl ? (
               <img
                 src={logoUrl}
-                alt={siteName}
+                alt={siteName || "Site logo"}
                 className="shrink-0 object-contain"
                 style={{
                   height: `clamp(46px, 7vw, ${logoHeight}px)`,

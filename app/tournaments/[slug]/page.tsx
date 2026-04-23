@@ -621,8 +621,7 @@ export default function PublicTournamentPage() {
 
       <section
   id="overview"
-  className="scroll-mt-28 mx-auto max-w-7xl px-4 pb-6 sm:px-6 lg:px-8"
-        className="mx-auto max-w-7xl px-4 pb-6 sm:px-6 lg:px-8"
+className="scroll-mt-28 mx-auto max-w-7xl px-4 pb-6 sm:px-6 lg:px-8"
       >
         <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
           <div className="rounded-[30px] bg-white p-6 shadow-xl ring-1 ring-slate-200">
@@ -776,8 +775,7 @@ export default function PublicTournamentPage() {
 
       <section
   id="points-table"
-  className="scroll-mt-28 mx-auto max-w-7xl px-4 pb-6 sm:px-6 lg:px-8"
-        className="mx-auto max-w-7xl px-4 pb-6 sm:px-6 lg:px-8"
+className="scroll-mt-28 mx-auto max-w-7xl px-4 pb-6 sm:px-6 lg:px-8"
       >
         <div className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
           <div className="rounded-[30px] bg-white p-6 shadow-xl ring-1 ring-slate-200">
@@ -898,9 +896,8 @@ return (
       </section>
 
       <section
-  id="matches"
-  className="scroll-mt-28 mx-auto max-w-7xl px-4 pb-6 sm:px-6 lg:px-8"
-        className="mx-auto max-w-7xl px-4 pb-6 sm:px-6 lg:px-8"
+  id="points-table"
+className="scroll-mt-28 mx-auto max-w-7xl px-4 pb-6 sm:px-6 lg:px-8"
       >
         <div className="rounded-[30px] bg-white p-6 shadow-xl ring-1 ring-slate-200">
           <SectionHeader
@@ -984,9 +981,8 @@ return (
       </section>
 
       <section
-  id="news"
-  className="scroll-mt-28 mx-auto max-w-7xl px-4 pb-10 sm:px-6 lg:px-8"
-        className="mx-auto max-w-7xl px-4 pb-10 sm:px-6 lg:px-8"
+  id="points-table"
+className="scroll-mt-28 mx-auto max-w-7xl px-4 pb-6 sm:px-6 lg:px-8"
       >
         <div className="rounded-[30px] bg-white p-6 shadow-xl ring-1 ring-slate-200">
           <SectionHeader
