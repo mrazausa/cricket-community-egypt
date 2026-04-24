@@ -38,8 +38,6 @@ const fallbackPublicNav = [
   { name: "Rankings", href: "/rankings" },
   { name: "Teams", href: "/teams" },
   { name: "Players", href: "/players" },
-  { name: "Media", href: "/media" },
-  { name: "History", href: "/history" },
 ];
 
 function mapPageKeyToHref(pageKey: string) {
