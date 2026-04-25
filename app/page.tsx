@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import SiteFooter from "@/components/layout/site-footer";
 import SiteHeader from "@/components/layout/site-header";
 import { supabase } from "@/utils/supabase/client";
@@ -393,8 +393,8 @@ export default function HomePage() {
   const [tournamentTeams, setTournamentTeams] = useState<TeamInfo[]>([]);
   const [teamRankings, setTeamRankings] = useState<TeamRankingRow[]>([]);
   const [playerRankings, setPlayerRankings] = useState<PlayerRankingRow[]>([]);
-  const [nextMatch, setNextMatch] = useState<MatchRow | null>(null);
-  const [latestResult, setLatestResult] = useState<MatchRow | null>(null);
+  const [upcomingMatches, setUpcomingMatches] = useState<MatchRow[]>([]);
+  const [completedMatches, setCompletedMatches] = useState<MatchRow[]>([]);
   const [latestNews, setLatestNews] = useState<NewsRow[]>([]);
   const [loadingLiveBlocks, setLoadingLiveBlocks] = useState(true);
   const [homepageFeaturedVisual, setHomepageFeaturedVisual] =
@@ -551,8 +551,8 @@ export default function HomePage() {
 
   async function loadLiveBlocks(tournamentId: string) {
     if (!tournamentId || tournamentId === fallbackTournament.id) {
-      setNextMatch(null);
-      setLatestResult(null);
+      setUpcomingMatches([]);
+      setCompletedMatches([]);
       setLatestNews([]);
       setLoadingLiveBlocks(false);
       return;
@@ -560,24 +560,26 @@ export default function HomePage() {
 
     setLoadingLiveBlocks(true);
 
-    const [nextMatchRes, latestResultRes, latestNewsRes] = await Promise.all([
+    const [upcomingRes, completedRes, latestNewsRes] = await Promise.all([
       supabase
         .from("matches")
         .select("*")
         .eq("tournament_id", tournamentId)
         .eq("status", "upcoming")
+        .eq("is_featured_home", true)
+        .order("sort_order", { ascending: true })
         .order("match_datetime", { ascending: true })
-        .limit(1)
-        .maybeSingle(),
+        .limit(8),
 
       supabase
         .from("matches")
         .select("*")
         .eq("tournament_id", tournamentId)
         .eq("status", "completed")
+        .eq("is_featured_home", true)
+        .order("sort_order", { ascending: true })
         .order("match_datetime", { ascending: false })
-        .limit(1)
-        .maybeSingle(),
+        .limit(8),
 
       supabase
         .from("news")
@@ -589,17 +591,13 @@ export default function HomePage() {
         .limit(3),
     ]);
 
-    if (!nextMatchRes.error) {
-      setNextMatch((nextMatchRes.data as MatchRow | null) || null);
-    } else {
-      setNextMatch(null);
-    }
+    setUpcomingMatches(
+      !upcomingRes.error ? ((upcomingRes.data || []) as MatchRow[]) : []
+    );
 
-    if (!latestResultRes.error) {
-      setLatestResult((latestResultRes.data as MatchRow | null) || null);
-    } else {
-      setLatestResult(null);
-    }
+    setCompletedMatches(
+      !completedRes.error ? ((completedRes.data || []) as MatchRow[]) : []
+    );
 
     if (!latestNewsRes.error) {
       setLatestNews((latestNewsRes.data || []) as NewsRow[]);
@@ -760,7 +758,8 @@ export default function HomePage() {
       ? `/tournaments/${featuredTournament.slug}`
       : "/tournaments";
 
-  const nextMatchLink = getMatchPrimaryLink(nextMatch);
+  const nextMatchLink =
+    upcomingMatches.length > 0 ? getMatchPrimaryLink(upcomingMatches[0]) : "";
   const latestNewsLink = latestNews.length > 0 ? "/news" : "";
   const rankingsLink = "/rankings";
   const heroMode = getHeroMode(homepageSettings);
@@ -775,9 +774,9 @@ export default function HomePage() {
             className="mx-auto w-full max-w-7xl px-4 py-5 sm:px-6 lg:px-8 lg:py-8"
             style={{ order: homepageSettings.hero_order ?? 1 }}
           >
-            <div className="grid gap-4 lg:grid-cols-[1.55fr_0.85fr] lg:items-start">
+            <div className="grid gap-5 lg:grid-cols-[1.75fr_0.9fr] lg:items-stretch">
               <div
-                className="overflow-hidden rounded-[30px] bg-gradient-to-br from-slate-950 via-[#02103a] to-emerald-900 p-6 text-white shadow-2xl sm:p-8 lg:self-start lg:p-7"
+                className="h-full overflow-hidden rounded-[30px] bg-gradient-to-br from-slate-950 via-[#02103a] to-emerald-900 p-6 text-white shadow-2xl sm:p-8 lg:p-7"
                 style={{
                   minHeight: `${featuredTournament.hero_min_height_desktop ?? 520}px`,
                   height: "fit-content",
@@ -1068,14 +1067,14 @@ export default function HomePage() {
                           rel="noreferrer"
                           className="inline-flex h-12 items-center justify-center rounded-2xl border border-white/20 bg-white/10 px-5 text-sm font-semibold text-white transition hover:bg-white/20"
                         >
-                          {nextMatch ? "Next Match" : "Match Center"}
+                          {upcomingMatches.length > 0 ? "Next Match" : "Match Center"}
                         </a>
                       ) : (
                         <a
                           href={tournamentLink}
                           className="inline-flex h-12 items-center justify-center rounded-2xl border border-white/20 bg-white/10 px-5 text-sm font-semibold text-white transition hover:bg-white/20"
                         >
-                          {nextMatch ? "Next Match" : "Match Center"}
+                          {upcomingMatches.length > 0 ? "Next Match" : "Match Center"}
                         </a>
                       )}
 
@@ -1097,7 +1096,7 @@ export default function HomePage() {
                 )}
               </div>
 
-              <div className="rounded-[30px] bg-white p-6 shadow-xl ring-1 ring-slate-200 sm:p-6 lg:max-h-[620px] lg:self-start lg:overflow-y-auto lg:p-7">
+              <div className="h-full min-h-[520px] max-h-[620px] overflow-y-auto rounded-[30px] bg-white p-5 shadow-xl ring-1 ring-slate-200 sm:p-6 lg:p-6">
                 {liveUpdates.length > 0 ? (
                   <>
                     <div className="flex items-center justify-between">
@@ -1114,7 +1113,7 @@ export default function HomePage() {
                         <img
                           src={liveUpdates[currentIndex].image_url}
                           alt={liveUpdates[currentIndex].title || "Live update"}
-                          className="w-full object-contain"
+                          className="h-[230px] w-full object-cover sm:h-[280px] lg:h-[260px]"
                         />
                       </div>
                     ) : null}
@@ -1314,87 +1313,38 @@ export default function HomePage() {
 
               <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
                 <div>
-                  <h3 className="text-lg font-bold">Live Tournament Blocks</h3>
-                  <div className="mt-4 space-y-5">
-                    {loadingLiveBlocks ? (
-                      <EmptyCard text="Loading live tournament updates..." />
-                    ) : (
-                      <>
-                        <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm transition hover:shadow-md">
-                          <div className="mb-2 flex items-center justify-between gap-3">
-                            <p className="text-sm font-bold text-slate-900">
-                              Next Match
-                            </p>
-                            <span className="inline-flex rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
-                              Upcoming
-                            </span>
-                          </div>
+                <h3 className="text-lg font-bold">Live Tournament Blocks</h3>
 
-                          {nextMatch ? (
-                            <>
-                              <p className="text-sm font-semibold text-slate-900">
-                                {buildHomepageMatchTitle(nextMatch, tournamentTeams)}
-                              </p>
-                              <p className="mt-1 text-sm text-slate-600">
-                                {formatMatchDateTime(nextMatch.match_datetime)}
-                              </p>
-                              <p className="mt-1 text-sm text-slate-600">
-                                Venue: {nextMatch.venue || "Venue update soon"}
-                              </p>
-                            </>
-                          ) : (
-                            <p className="text-sm text-slate-500">
-                              No upcoming match added yet.
-                            </p>
-                          )}
-                        </div>
+                <div className="mt-4 space-y-5">
+                  {loadingLiveBlocks ? (
+                    <EmptyCard text="Loading live tournament updates..." />
+                  ) : (
+                    <>
+                      <MatchCarousel
+                        title="Upcoming Matches"
+                        badge="Upcoming"
+                        badgeClass="bg-emerald-100 text-emerald-700"
+                        emptyText="No upcoming match added yet."
+                        matches={upcomingMatches}
+                        teams={tournamentTeams}
+                        type="upcoming"
+                      />
 
-                        <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm transition hover:shadow-md">
-                          <div className="mb-2 flex items-center justify-between gap-3">
-                            <p className="text-sm font-bold text-slate-900">
-                              Latest Result
-                            </p>
-                            <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-                              Completed
-                            </span>
-                          </div>
-
-                          {latestResult ? (
-                            <>
-                              <p className="text-sm font-semibold text-slate-900">
-                                {buildHomepageMatchTitle(latestResult, tournamentTeams)}
-                              </p>
-                              <p className="mt-1 text-sm text-slate-600">
-                                {latestResult.result_summary ||
-                                  "Result summary not updated"}
-                              </p>
-                              <p className="mt-1 text-sm text-slate-600">
-  Player of the Match: {latestResult.player_of_match || "Not updated"}
-</p>
-
-{latestResult.scorecard_pdf_url ? (
-  <a
-    href={latestResult.scorecard_pdf_url}
-    target="_blank"
-    rel="noreferrer"
-    className="mt-3 inline-flex h-10 items-center justify-center rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white transition hover:bg-emerald-700"
-  >
-    View Scorecard PDF
-  </a>
-) : null}
-                            </>
-                          ) : (
-                            <p className="text-sm text-slate-500">
-                              No completed match result yet.
-                            </p>
-                          )}
-                        </div>
-                      </>
-                    )}
-                  </div>
+                      <MatchCarousel
+                        title="Completed Results"
+                        badge="Completed"
+                        badgeClass="bg-slate-100 text-slate-700"
+                        emptyText="No completed match result yet."
+                        matches={completedMatches}
+                        teams={tournamentTeams}
+                        type="completed"
+                      />
+                    </>
+                  )}
                 </div>
+              </div>
 
-                <div>
+              <div>
   <h3 className="text-lg font-bold">Tournament Center</h3>
   <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-5">
     <p className="text-sm font-semibold text-slate-900">
@@ -1895,6 +1845,119 @@ function QuickLink({
       <p className="text-sm font-bold text-slate-900">{title}</p>
       <p className="mt-1 text-sm text-slate-600">{subtitle}</p>
     </a>
+  );
+}
+
+function MatchCarousel({
+  title,
+  badge,
+  badgeClass,
+  emptyText,
+  matches,
+  teams,
+  type,
+}: {
+  title: string;
+  badge: string;
+  badgeClass: string;
+  emptyText: string;
+  matches: MatchRow[];
+  teams: TeamInfo[];
+  type: "upcoming" | "completed";
+}) {
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!matches || matches.length <= 1) return;
+
+    const timer = window.setInterval(() => {
+      const el = scrollerRef.current;
+      if (!el) return;
+
+      const maxScroll = el.scrollWidth - el.clientWidth;
+      if (maxScroll <= 0) return;
+
+      const nextLeft =
+        el.scrollLeft + el.clientWidth >= maxScroll - 20
+          ? 0
+          : el.scrollLeft + Math.min(320, el.clientWidth);
+
+      el.scrollTo({ left: nextLeft, behavior: "smooth" });
+    }, 3500);
+
+    return () => window.clearInterval(timer);
+  }, [matches]);
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <p className="text-sm font-bold text-slate-900">{title}</p>
+        <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${badgeClass}`}>
+          {badge}
+        </span>
+      </div>
+
+      {matches.length > 0 ? (
+        <div ref={scrollerRef} className="flex snap-x gap-3 overflow-x-auto pb-2">
+          {matches.map((match) => (
+            <MatchMiniCard key={match.id} match={match} teams={teams} type={type} />
+          ))}
+        </div>
+      ) : (
+        <p className="text-sm text-slate-500">{emptyText}</p>
+      )}
+    </div>
+  );
+}
+
+function MatchMiniCard({
+  match,
+  teams,
+  type,
+}: {
+  match: MatchRow;
+  teams: TeamInfo[];
+  type: "upcoming" | "completed";
+}) {
+  const primaryLink = getMatchPrimaryLink(match);
+
+  return (
+    <div className="min-w-[260px] snap-start rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:min-w-[300px]">
+      <p className="text-sm font-semibold text-slate-900">
+        {buildHomepageMatchTitle(match, teams)}
+      </p>
+
+      {type === "upcoming" ? (
+        <>
+          <p className="mt-2 text-sm text-slate-600">
+            {formatMatchDateTime(match.match_datetime)}
+          </p>
+          <p className="mt-1 text-sm text-slate-600">
+            Venue: {match.venue || "Venue update soon"}
+          </p>
+        </>
+      ) : (
+        <>
+          <p className="mt-2 text-sm text-slate-600">
+            {match.result_summary || "Result summary not updated"}
+          </p>
+          <p className="mt-1 text-sm text-slate-600">
+            Player of the Match: {match.player_of_match || "Not updated"}
+          </p>
+        </>
+      )}
+
+      {primaryLink ? (
+        <a
+          href={primaryLink}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-3 inline-flex h-9 items-center justify-center rounded-xl bg-slate-900 px-3 text-xs font-semibold text-white transition hover:bg-slate-800"
+        >
+          {type === "completed" ? "View Scorecard" : "Open Match"}
+        </a>
+      ) : null}
+    </div>
   );
 }
 
