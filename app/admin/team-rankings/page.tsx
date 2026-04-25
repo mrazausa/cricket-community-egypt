@@ -20,11 +20,16 @@ type TeamRankingRow = {
   points: number | null;
   matches: number | null;
   wins: number | null;
+  losses: number | null;
+  nrr: number | null;
   form: string | null;
   rating: number | null;
   season_label: string | null;
   team_name_override: string | null;
   team_logo_override_url: string | null;
+  is_active: boolean | null;
+  show_on_homepage: boolean | null;
+  sort_order: number | null;
   created_at?: string | null;
   updated_at?: string | null;
   teams?: TeamInfo | TeamInfo[] | null;
@@ -35,11 +40,16 @@ type EditableRow = {
   points: string;
   matches: string;
   wins: string;
+  losses: string;
+  nrr: string;
   form: string;
   rating: string;
   season_label: string;
   team_name_override: string;
   team_logo_override_url: string;
+  is_active: boolean;
+  show_on_homepage: boolean;
+  sort_order: string;
 };
 
 const EMPTY_EDITABLE: EditableRow = {
@@ -47,20 +57,34 @@ const EMPTY_EDITABLE: EditableRow = {
   points: "",
   matches: "",
   wins: "",
+  losses: "",
+  nrr: "",
   form: "",
   rating: "",
-  season_label: "",
+  season_label: "current",
   team_name_override: "",
   team_logo_override_url: "",
+  is_active: true,
+  show_on_homepage: true,
+  sort_order: "",
 };
 
 export default function AdminTeamRankingsPage() {
   const [rows, setRows] = useState<TeamRankingRow[]>([]);
   const [formState, setFormState] = useState<Record<string, EditableRow>>({});
+  const [newForm, setNewForm] = useState<EditableRow>({ ...EMPTY_EDITABLE });
+
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [uploadingId, setUploadingId] = useState<string | null>(null);
+  const [uploadingNewLogo, setUploadingNewLogo] = useState(false);
   const [message, setMessage] = useState("");
   const [errorText, setErrorText] = useState("");
+
+  useEffect(() => {
+    loadRankings();
+  }, []);
 
   async function loadRankings() {
     setLoading(true);
@@ -69,31 +93,35 @@ export default function AdminTeamRankingsPage() {
 
     const { data, error } = await supabase
       .from("team_rankings")
-      .select(
-        `
+      .select(`
+        id,
+        team_id,
+        rank_position,
+        points,
+        matches,
+        wins,
+        losses,
+        nrr,
+        form,
+        rating,
+        season_label,
+        team_name_override,
+        team_logo_override_url,
+        is_active,
+        show_on_homepage,
+        sort_order,
+        created_at,
+        updated_at,
+        teams (
           id,
-          team_id,
-          rank_position,
-          points,
-          matches,
-          wins,
-          form,
-          rating,
-          season_label,
-          team_name_override,
-          team_logo_override_url,
-          created_at,
-          updated_at,
-          teams (
-            id,
-            name,
-            slug,
-            logo_url,
-            badge
-          )
-        `
-      )
-      .order("rank_position", { ascending: true });
+          name,
+          slug,
+          logo_url,
+          badge
+        )
+      `)
+      .order("sort_order", { ascending: true, nullsFirst: false })
+      .order("rank_position", { ascending: true, nullsFirst: false });
 
     if (error) {
       console.error("Failed to load team rankings:", error);
@@ -108,27 +136,29 @@ export default function AdminTeamRankingsPage() {
     setRows(safeRows);
 
     const nextFormState: Record<string, EditableRow> = {};
-    for (const row of safeRows) {
-      nextFormState[row.id] = {
-        rank_position: row.rank_position?.toString() ?? "",
-        points: row.points?.toString() ?? "",
-        matches: row.matches?.toString() ?? "",
-        wins: row.wins?.toString() ?? "",
-        form: row.form ?? "",
-        rating: row.rating?.toString() ?? "",
-        season_label: row.season_label ?? "",
-        team_name_override: row.team_name_override ?? "",
-        team_logo_override_url: row.team_logo_override_url ?? "",
-      };
-    }
-
+    for (const row of safeRows) nextFormState[row.id] = rowToEditable(row);
     setFormState(nextFormState);
     setLoading(false);
   }
 
-  useEffect(() => {
-    loadRankings();
-  }, []);
+  function rowToEditable(row: TeamRankingRow): EditableRow {
+    return {
+      rank_position: row.rank_position?.toString() ?? "",
+      points: row.points?.toString() ?? "",
+      matches: row.matches?.toString() ?? "",
+      wins: row.wins?.toString() ?? "",
+      losses: row.losses?.toString() ?? "",
+      nrr: row.nrr?.toString() ?? "",
+      form: row.form ?? "",
+      rating: row.rating?.toString() ?? "",
+      season_label: row.season_label ?? "current",
+      team_name_override: row.team_name_override ?? "",
+      team_logo_override_url: row.team_logo_override_url ?? "",
+      is_active: row.is_active ?? true,
+      show_on_homepage: row.show_on_homepage ?? true,
+      sort_order: row.sort_order?.toString() ?? "",
+    };
+  }
 
   function getTeam(row: TeamRankingRow): TeamInfo | null {
     if (!row.teams) return null;
@@ -136,110 +166,116 @@ export default function AdminTeamRankingsPage() {
     return row.teams;
   }
 
-  function getTeamImage(row: TeamRankingRow, team: TeamInfo | null) {
-    if (row.team_logo_override_url) return row.team_logo_override_url;
-    if (!team) return null;
-    return team.logo_url || team.badge || null;
+  function getTeamImage(row: TeamRankingRow, form: EditableRow, team: TeamInfo | null) {
+    return form.team_logo_override_url || row.team_logo_override_url || team?.logo_url || team?.badge || null;
   }
 
-  function handleChange(
-    rowId: string,
-    field: keyof EditableRow,
-    value: string
-  ) {
+  function getDisplayName(row: TeamRankingRow, form: EditableRow, team: TeamInfo | null) {
+    return form.team_name_override || row.team_name_override || team?.name || "Static Team";
+  }
+
+  function updateRowField(rowId: string, field: keyof EditableRow, value: string | boolean) {
     setFormState((prev) => ({
       ...prev,
-      [rowId]: {
-        ...(prev[rowId] || EMPTY_EDITABLE),
-        [field]: value,
-      },
+      [rowId]: { ...(prev[rowId] || EMPTY_EDITABLE), [field]: value },
     }));
+  }
+
+  function updateNewField(field: keyof EditableRow, value: string | boolean) {
+    setNewForm((prev) => ({ ...prev, [field]: value }));
+  }
+
+  async function uploadLogo(file: File, prefix: string) {
+    const fileExt = (file.name.split(".").pop() || "png").toLowerCase();
+    const filePath = `rankings/team/${prefix}-${Date.now()}.${fileExt}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from(MEDIA_BUCKET)
+      .upload(filePath, file, { cacheControl: "3600", upsert: true });
+
+    if (uploadError) throw uploadError;
+
+    const { data } = supabase.storage.from(MEDIA_BUCKET).getPublicUrl(filePath);
+    return data.publicUrl;
   }
 
   async function handleTeamLogoUpload(rowId: string, file: File) {
     try {
+      setUploadingId(rowId);
       setMessage("");
       setErrorText("");
-
-      const fileExt = file.name.split(".").pop() || "png";
-      const fileName = `team-ranking-${rowId}-${Date.now()}.${fileExt}`;
-      const filePath = `rankings/team/${fileName}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from(MEDIA_BUCKET)
-        .upload(filePath, file, {
-          cacheControl: "3600",
-          upsert: true,
-        });
-
-      if (uploadError) throw uploadError;
-
-      const { data } = supabase.storage
-        .from(MEDIA_BUCKET)
-        .getPublicUrl(filePath);
-
-      setFormState((prev) => ({
-        ...prev,
-        [rowId]: {
-          ...(prev[rowId] || EMPTY_EDITABLE),
-          team_logo_override_url: data.publicUrl,
-        },
-      }));
-
+      const publicUrl = await uploadLogo(file, `team-ranking-${rowId}`);
+      updateRowField(rowId, "team_logo_override_url", publicUrl);
       setMessage("Team logo uploaded successfully. Click Save to apply.");
     } catch (error: any) {
       setErrorText(error?.message || "Failed to upload team logo.");
+    } finally {
+      setUploadingId(null);
     }
+  }
+
+  async function handleNewLogoUpload(file: File) {
+    try {
+      setUploadingNewLogo(true);
+      setMessage("");
+      setErrorText("");
+      const publicUrl = await uploadLogo(file, "team-ranking-new");
+      updateNewField("team_logo_override_url", publicUrl);
+      setMessage("Logo uploaded successfully. Create the ranking row to save it.");
+    } catch (error: any) {
+      setErrorText(error?.message || "Failed to upload team logo.");
+    } finally {
+      setUploadingNewLogo(false);
+    }
+  }
+
+  function buildPayload(current: EditableRow) {
+    return {
+      rank_position: toNumberOrNull(current.rank_position),
+      points: toNumberOrNull(current.points),
+      matches: toNumberOrNull(current.matches),
+      wins: toNumberOrNull(current.wins),
+      losses: toNumberOrNull(current.losses),
+      nrr: toNumberOrNull(current.nrr),
+      form: toTextOrNull(current.form),
+      rating: toNumberOrNull(current.rating),
+      season_label: toTextOrNull(current.season_label),
+      team_name_override: toTextOrNull(current.team_name_override),
+      team_logo_override_url: toTextOrNull(current.team_logo_override_url),
+      is_active: current.is_active,
+      show_on_homepage: current.show_on_homepage,
+      sort_order: toNumberOrNull(current.sort_order),
+    };
+  }
+
+  function validatePayload(payload: ReturnType<typeof buildPayload>) {
+    return [
+      payload.rank_position,
+      payload.points,
+      payload.matches,
+      payload.wins,
+      payload.losses,
+      payload.nrr,
+      payload.rating,
+      payload.sort_order,
+    ].every((value) => value === null || !Number.isNaN(value));
   }
 
   async function saveRow(rowId: string) {
     const current = formState[rowId];
     if (!current) return;
 
+    const payload = buildPayload(current);
+    if (!validatePayload(payload)) {
+      setErrorText("Please enter valid numeric values before saving.");
+      return;
+    }
+
     setSavingId(rowId);
     setMessage("");
     setErrorText("");
 
-    const payload = {
-      rank_position:
-        current.rank_position === "" ? null : Number(current.rank_position),
-      points: current.points === "" ? null : Number(current.points),
-      matches: current.matches === "" ? null : Number(current.matches),
-      wins: current.wins === "" ? null : Number(current.wins),
-      form: current.form.trim() === "" ? null : current.form.trim(),
-      rating: current.rating === "" ? null : Number(current.rating),
-      season_label:
-        current.season_label.trim() === ""
-          ? null
-          : current.season_label.trim(),
-      team_name_override:
-        current.team_name_override.trim() === ""
-          ? null
-          : current.team_name_override.trim(),
-      team_logo_override_url:
-        current.team_logo_override_url.trim() === ""
-          ? null
-          : current.team_logo_override_url.trim(),
-    };
-
-    if (
-      (payload.rank_position !== null && Number.isNaN(payload.rank_position)) ||
-      (payload.points !== null && Number.isNaN(payload.points)) ||
-      (payload.matches !== null && Number.isNaN(payload.matches)) ||
-      (payload.wins !== null && Number.isNaN(payload.wins)) ||
-      (payload.rating !== null && Number.isNaN(payload.rating))
-    ) {
-      setErrorText(
-        "Please enter valid numeric values for rank position, points, matches, wins, and rating."
-      );
-      setSavingId(null);
-      return;
-    }
-
-    const { error } = await supabase
-      .from("team_rankings")
-      .update(payload)
-      .eq("id", rowId);
+    const { error } = await supabase.from("team_rankings").update(payload).eq("id", rowId);
 
     if (error) {
       console.error("Failed to update team ranking:", error);
@@ -250,13 +286,7 @@ export default function AdminTeamRankingsPage() {
 
     setRows((prev) =>
       prev.map((row) =>
-        row.id === rowId
-          ? {
-              ...row,
-              ...payload,
-              updated_at: new Date().toISOString(),
-            }
-          : row
+        row.id === rowId ? { ...row, ...payload, updated_at: new Date().toISOString() } : row
       )
     );
 
@@ -264,404 +294,372 @@ export default function AdminTeamRankingsPage() {
     setSavingId(null);
   }
 
+  async function createRanking() {
+    const payload = buildPayload(newForm);
+
+    if (!newForm.team_name_override.trim()) {
+      setErrorText("Please enter a team display name for the static ranking row.");
+      return;
+    }
+
+    if (!validatePayload(payload)) {
+      setErrorText("Please enter valid numeric values before creating.");
+      return;
+    }
+
+    setCreating(true);
+    setMessage("");
+    setErrorText("");
+
+    const { error } = await supabase.from("team_rankings").insert({
+      team_id: null,
+      ...payload,
+    });
+
+    if (error) {
+      console.error("Failed to create team ranking:", error);
+      setErrorText(error.message || "Failed to create team ranking.");
+      setCreating(false);
+      return;
+    }
+
+    setNewForm({ ...EMPTY_EDITABLE });
+    setMessage("Static team ranking row created successfully.");
+    setCreating(false);
+    loadRankings();
+  }
+
+  async function deleteRow(rowId: string) {
+    if (!window.confirm("Delete this team ranking row?")) return;
+
+    setSavingId(rowId);
+    setMessage("");
+    setErrorText("");
+
+    const { error } = await supabase.from("team_rankings").delete().eq("id", rowId);
+
+    if (error) {
+      console.error("Failed to delete team ranking:", error);
+      setErrorText(error.message || "Failed to delete team ranking.");
+      setSavingId(null);
+      return;
+    }
+
+    setRows((prev) => prev.filter((row) => row.id !== rowId));
+    setMessage("Team ranking row deleted.");
+    setSavingId(null);
+  }
+
   const sortedRows = useMemo(() => {
     return [...rows].sort((a, b) => {
-      const aPos = a.rank_position ?? 999999;
-      const bPos = b.rank_position ?? 999999;
-      return aPos - bPos;
+      const aSort = a.sort_order ?? 999999;
+      const bSort = b.sort_order ?? 999999;
+      if (aSort !== bSort) return aSort - bSort;
+      return (a.rank_position ?? 999999) - (b.rank_position ?? 999999);
     });
   }, [rows]);
+
+  const activeCount = rows.filter((row) => row.is_active !== false).length;
+  const homepageCount = sortedRows.filter((row) => row.show_on_homepage !== false && row.is_active !== false).length;
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="text-sm uppercase tracking-[0.25em] text-emerald-400/80">
-              Admin Panel
-            </p>
-            <h1 className="mt-1 text-2xl font-bold sm:text-3xl">
-              Team Rankings Management
-            </h1>
-            <p className="mt-2 max-w-2xl text-sm text-slate-300">
-              Launch mode: upload team logo, set display name override, and edit
-              team ranking fields from one place.
+            <p className="text-sm uppercase tracking-[0.25em] text-emerald-400/80">Admin Panel</p>
+            <h1 className="mt-1 text-2xl font-bold sm:text-3xl">Team Rankings Management</h1>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300">
+              Launch mode: edit static team rankings, upload logos, control active rows, and choose which teams appear on homepage.
             </p>
           </div>
 
-          <button
-            onClick={loadRankings}
-            className="inline-flex h-11 items-center justify-center rounded-xl border border-white/10 bg-white/5 px-4 text-sm font-medium text-white transition hover:bg-white/10"
-          >
-            Refresh
-          </button>
+          <div className="flex flex-wrap gap-3">
+            <a
+              href="/rankings"
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex h-11 items-center justify-center rounded-xl border border-white/10 bg-white/5 px-4 text-sm font-medium text-white transition hover:bg-white/10"
+            >
+              View Public Rankings
+            </a>
+            <button
+              onClick={loadRankings}
+              className="inline-flex h-11 items-center justify-center rounded-xl border border-white/10 bg-white/5 px-4 text-sm font-medium text-white transition hover:bg-white/10"
+            >
+              Refresh
+            </button>
+          </div>
         </div>
 
-        {message ? (
-          <div className="mb-4 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
-            {message}
-          </div>
-        ) : null}
+        <div className="mb-5 grid gap-3 sm:grid-cols-3">
+          <SummaryCard label="Total Rows" value={rows.length} />
+          <SummaryCard label="Active Rows" value={activeCount} />
+          <SummaryCard label="Homepage Top 5" value={`${Math.min(homepageCount, 5)} / 5`} />
+        </div>
 
-        {errorText ? (
-          <div className="mb-4 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">
-            {errorText}
-          </div>
-        ) : null}
+        {message ? <MessageBox type="success">{message}</MessageBox> : null}
+        {errorText ? <MessageBox type="error">{errorText}</MessageBox> : null}
 
-        <div className="overflow-hidden rounded-3xl border border-white/10 bg-white/5 shadow-2xl shadow-black/20">
+        <section className="mb-6 rounded-3xl border border-white/10 bg-white/[0.04] p-4 shadow-2xl shadow-black/20 sm:p-5">
+          <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-300">Add Static Team</p>
+              <h2 className="mt-1 text-xl font-bold">Create new ranking row</h2>
+            </div>
+            <button
+              onClick={createRanking}
+              disabled={creating}
+              className="inline-flex h-11 items-center justify-center rounded-xl bg-emerald-500 px-5 text-sm font-bold text-slate-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {creating ? "Creating..." : "Create Row"}
+            </button>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <TextInput label="Team Display Name *" value={newForm.team_name_override} onChange={(value) => updateNewField("team_name_override", value)} placeholder="India Blue" />
+            <TextInput label="Rank" value={newForm.rank_position} onChange={(value) => updateNewField("rank_position", value)} placeholder="1" />
+            <TextInput label="Points" value={newForm.points} onChange={(value) => updateNewField("points", value)} placeholder="128" />
+            <TextInput label="Matches" value={newForm.matches} onChange={(value) => updateNewField("matches", value)} placeholder="14" />
+            <TextInput label="Wins" value={newForm.wins} onChange={(value) => updateNewField("wins", value)} placeholder="11" />
+            <TextInput label="Losses" value={newForm.losses} onChange={(value) => updateNewField("losses", value)} placeholder="3" />
+            <TextInput label="NRR" value={newForm.nrr} onChange={(value) => updateNewField("nrr", value)} placeholder="1.25" />
+            <TextInput label="Rating" value={newForm.rating} onChange={(value) => updateNewField("rating", value)} placeholder="98" />
+            <TextInput label="Form" value={newForm.form} onChange={(value) => updateNewField("form", value)} placeholder="W W W L W" />
+            <TextInput label="Season" value={newForm.season_label} onChange={(value) => updateNewField("season_label", value)} placeholder="current" />
+            <TextInput label="Sort Order" value={newForm.sort_order} onChange={(value) => updateNewField("sort_order", value)} placeholder="1" />
+
+            <div>
+              <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Logo</label>
+              <div className="flex items-center gap-3">
+                {newForm.team_logo_override_url ? (
+                  <img src={newForm.team_logo_override_url} alt="New team logo" className="h-11 w-11 rounded-full object-cover ring-1 ring-white/15" />
+                ) : (
+                  <div className="flex h-11 w-11 items-center justify-center rounded-full bg-emerald-500/10 text-sm font-bold text-emerald-300 ring-1 ring-emerald-400/20">+</div>
+                )}
+                <label className="inline-flex h-11 cursor-pointer items-center justify-center rounded-xl bg-emerald-500 px-4 text-sm font-bold text-slate-950 transition hover:bg-emerald-400">
+                  {uploadingNewLogo ? "Uploading..." : "Upload"}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file) handleNewLogoUpload(file);
+                    }}
+                  />
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-4 flex flex-wrap gap-3">
+            <Toggle label="Active" checked={newForm.is_active} onChange={(checked) => updateNewField("is_active", checked)} />
+            <Toggle label="Show on Homepage" checked={newForm.show_on_homepage} onChange={(checked) => updateNewField("show_on_homepage", checked)} />
+          </div>
+        </section>
+
+        <section className="rounded-3xl border border-white/10 bg-white/[0.04] p-4 shadow-2xl shadow-black/20 sm:p-5">
+          <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-300">Existing Rankings</p>
+              <h2 className="mt-1 text-xl font-bold">Edit team ranking rows</h2>
+            </div>
+            <p className="text-sm text-slate-400">Homepage displays first 5 active homepage-enabled rows.</p>
+          </div>
+
           {loading ? (
-            <div className="px-4 py-12 text-center text-sm text-slate-300">
-              Loading team rankings...
-            </div>
+            <div className="rounded-2xl border border-white/10 bg-slate-900/70 px-4 py-10 text-center text-sm text-slate-300">Loading team rankings...</div>
           ) : sortedRows.length === 0 ? (
-            <div className="px-4 py-12 text-center text-sm text-slate-300">
-              No team rankings found.
-            </div>
+            <div className="rounded-2xl border border-white/10 bg-slate-900/70 px-4 py-10 text-center text-sm text-slate-300">No team rankings found. Create a static row above.</div>
           ) : (
-            <>
-              <div className="grid gap-4 p-4 md:hidden">
-                {sortedRows.map((row) => {
-                  const team = getTeam(row);
-                  const image = getTeamImage(row, team);
-                  const displayTeamName =
-                    row.team_name_override || team?.name || "Unknown Team";
-                  const form = formState[row.id] || EMPTY_EDITABLE;
+            <div className="grid gap-4">
+              {sortedRows.map((row) => {
+                const team = getTeam(row);
+                const form = formState[row.id] || EMPTY_EDITABLE;
+                const displayName = getDisplayName(row, form, team);
+                const image = getTeamImage(row, form, team);
 
-                  return (
-                    <div
-                      key={row.id}
-                      className="rounded-2xl border border-white/10 bg-slate-900/70 p-4"
-                    >
-                      <div className="mb-4 flex items-center gap-3">
+                return (
+                  <article key={row.id} className="rounded-3xl border border-white/10 bg-slate-900/70 p-4 ring-1 ring-transparent transition hover:ring-emerald-400/20 sm:p-5">
+                    <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="flex min-w-0 items-center gap-4">
                         {image ? (
-                          <img
-                            src={image}
-                            alt={displayTeamName}
-                            className="h-12 w-12 rounded-full object-cover ring-1 ring-white/10"
-                          />
+                          <img src={image} alt={displayName} className="h-16 w-16 shrink-0 rounded-full object-cover ring-2 ring-white/10" />
                         ) : (
-                          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/15 text-sm font-semibold text-emerald-300 ring-1 ring-emerald-400/20">
-                            {displayTeamName.slice(0, 1).toUpperCase()}
+                          <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-emerald-500/15 text-xl font-bold text-emerald-300 ring-1 ring-emerald-400/20">
+                            {displayName.slice(0, 1).toUpperCase()}
                           </div>
                         )}
-
-                        <div>
-                          <h2 className="text-base font-semibold text-white">
-                            {displayTeamName}
-                          </h2>
-                          <p className="text-xs text-slate-400">
-                            team_id: {row.team_id || "N/A"}
-                          </p>
+                        <div className="min-w-0">
+                          <p className="truncate text-xl font-bold text-white">{displayName}</p>
+                          <p className="mt-1 text-xs text-slate-400">Base team: {team?.name || "Static / not linked yet"}</p>
+                          <p className="mt-1 break-all text-xs text-slate-500">Row ID: {row.id}</p>
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-3">
-                        <Field
-                          label="Rank"
-                          type="number"
-                          value={form.rank_position}
-                          onChange={(value) =>
-                            handleChange(row.id, "rank_position", value)
-                          }
-                        />
-                        <Field
-                          label="Points"
-                          type="number"
-                          value={form.points}
-                          onChange={(value) =>
-                            handleChange(row.id, "points", value)
-                          }
-                        />
-                        <Field
-                          label="Matches"
-                          type="number"
-                          value={form.matches}
-                          onChange={(value) =>
-                            handleChange(row.id, "matches", value)
-                          }
-                        />
-                        <Field
-                          label="Wins"
-                          type="number"
-                          value={form.wins}
-                          onChange={(value) =>
-                            handleChange(row.id, "wins", value)
-                          }
-                        />
-                        <Field
-                          label="Form"
-                          value={form.form}
-                          onChange={(value) =>
-                            handleChange(row.id, "form", value)
-                          }
-                        />
-                        <Field
-                          label="Rating"
-                          type="number"
-                          value={form.rating}
-                          onChange={(value) =>
-                            handleChange(row.id, "rating", value)
-                          }
-                        />
-                      </div>
-
-                      <div className="mt-3 grid gap-3">
-                        <Field
-                          label="Season Label"
-                          value={form.season_label}
-                          onChange={(value) =>
-                            handleChange(row.id, "season_label", value)
-                          }
-                        />
-                        <Field
-                          label="Team Name Override"
-                          value={form.team_name_override}
-                          onChange={(value) =>
-                            handleChange(row.id, "team_name_override", value)
-                          }
-                        />
-                        <label className="block">
-                          <span className="mb-1 block text-xs font-medium text-slate-300">
-                            Team Logo Upload
-                          </span>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (file) handleTeamLogoUpload(row.id, file);
-                            }}
-                            className="block w-full text-sm text-slate-300 file:mr-4 file:rounded-xl file:border-0 file:bg-emerald-500 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-slate-950 hover:file:bg-emerald-400"
-                          />
-                        </label>
-                      </div>
-
-                      <button
-                        onClick={() => saveRow(row.id)}
-                        disabled={savingId === row.id}
-                        className="mt-4 inline-flex h-11 w-full items-center justify-center rounded-xl bg-emerald-500 px-4 text-sm font-semibold text-slate-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        {savingId === row.id ? "Saving..." : "Save Changes"}
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-
-              <div className="hidden overflow-x-auto md:block">
-                <table className="min-w-full text-sm">
-                  <thead className="bg-white/5 text-left text-slate-300">
-                    <tr>
-                      <th className="px-4 py-4 font-medium">Team</th>
-                      <th className="px-4 py-4 font-medium">Rank</th>
-                      <th className="px-4 py-4 font-medium">Points</th>
-                      <th className="px-4 py-4 font-medium">Matches</th>
-                      <th className="px-4 py-4 font-medium">Wins</th>
-                      <th className="px-4 py-4 font-medium">Form</th>
-                      <th className="px-4 py-4 font-medium">Rating</th>
-                      <th className="px-4 py-4 font-medium">Season</th>
-                      <th className="px-4 py-4 font-medium">Display Name</th>
-                      <th className="px-4 py-4 font-medium">Logo</th>
-                      <th className="px-4 py-4 font-medium">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sortedRows.map((row) => {
-                      const team = getTeam(row);
-                      const image = getTeamImage(row, team);
-                      const displayTeamName =
-                        row.team_name_override || team?.name || "Unknown Team";
-                      const form = formState[row.id] || EMPTY_EDITABLE;
-
-                      return (
-                        <tr
-                          key={row.id}
-                          className="border-t border-white/10 bg-slate-950/20"
+                      <div className="flex flex-wrap gap-2">
+                        <StatusPill active={form.is_active} label={form.is_active ? "Active" : "Hidden"} />
+                        <StatusPill active={form.show_on_homepage} label={form.show_on_homepage ? "Homepage" : "Ranking only"} />
+                        <button
+                          onClick={() => saveRow(row.id)}
+                          disabled={savingId === row.id}
+                          className="inline-flex h-10 items-center justify-center rounded-xl bg-emerald-500 px-4 text-sm font-bold text-slate-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                          <td className="px-4 py-4">
-                            <div className="flex items-center gap-3">
-                              {image ? (
-                                <img
-                                  src={image}
-                                  alt={displayTeamName}
-                                  className="h-10 w-10 rounded-full object-cover ring-1 ring-white/10"
-                                />
-                              ) : (
-                                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/15 text-sm font-semibold text-emerald-300 ring-1 ring-emerald-400/20">
-                                  {displayTeamName.slice(0, 1).toUpperCase()}
-                                </div>
-                              )}
+                          {savingId === row.id ? "Saving..." : "Save"}
+                        </button>
+                        <button
+                          onClick={() => deleteRow(row.id)}
+                          disabled={savingId === row.id}
+                          className="inline-flex h-10 items-center justify-center rounded-xl border border-red-400/30 bg-red-500/10 px-4 text-sm font-bold text-red-200 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
 
-                              <div>
-                                <div className="font-semibold text-white">
-                                  {displayTeamName}
-                                </div>
-                                <div className="text-xs text-slate-400">
-                                  {row.team_id || "No team_id"}
-                                </div>
-                              </div>
-                            </div>
-                          </td>
+                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                      <TextInput label="Display Team Name" value={form.team_name_override} onChange={(value) => updateRowField(row.id, "team_name_override", value)} placeholder={team?.name || "Team name"} />
+                      <TextInput label="Rank" value={form.rank_position} onChange={(value) => updateRowField(row.id, "rank_position", value)} placeholder="1" />
+                      <TextInput label="Points" value={form.points} onChange={(value) => updateRowField(row.id, "points", value)} placeholder="128" />
+                      <TextInput label="Matches" value={form.matches} onChange={(value) => updateRowField(row.id, "matches", value)} placeholder="14" />
+                      <TextInput label="Wins" value={form.wins} onChange={(value) => updateRowField(row.id, "wins", value)} placeholder="11" />
+                      <TextInput label="Losses" value={form.losses} onChange={(value) => updateRowField(row.id, "losses", value)} placeholder="3" />
+                      <TextInput label="NRR" value={form.nrr} onChange={(value) => updateRowField(row.id, "nrr", value)} placeholder="1.25" />
+                      <TextInput label="Rating" value={form.rating} onChange={(value) => updateRowField(row.id, "rating", value)} placeholder="98" />
+                      <TextInput label="Form" value={form.form} onChange={(value) => updateRowField(row.id, "form", value)} placeholder="W W W L W" />
+                      <TextInput label="Season" value={form.season_label} onChange={(value) => updateRowField(row.id, "season_label", value)} placeholder="current" />
+                      <TextInput label="Sort Order" value={form.sort_order} onChange={(value) => updateRowField(row.id, "sort_order", value)} placeholder="1" />
+                      <TextInput label="Logo URL" value={form.team_logo_override_url} onChange={(value) => updateRowField(row.id, "team_logo_override_url", value)} placeholder="Auto-filled after upload" />
+                    </div>
 
-                          <td className="px-4 py-4">
-                            <input
-                              type="number"
-                              value={form.rank_position}
-                              onChange={(e) =>
-                                handleChange(
-                                  row.id,
-                                  "rank_position",
-                                  e.target.value
-                                )
-                              }
-                              className="h-10 w-20 rounded-xl border border-white/10 bg-white/5 px-3 text-white outline-none focus:border-emerald-400"
-                            />
-                          </td>
+                    <div className="mt-4 flex flex-wrap items-center gap-3">
+                      <label className="inline-flex h-11 cursor-pointer items-center justify-center rounded-xl bg-white px-4 text-sm font-bold text-slate-950 transition hover:bg-slate-100">
+                        {uploadingId === row.id ? "Uploading..." : "Upload Logo"}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(event) => {
+                            const file = event.target.files?.[0];
+                            if (file) handleTeamLogoUpload(row.id, file);
+                          }}
+                        />
+                      </label>
 
-                          <td className="px-4 py-4">
-                            <input
-                              type="number"
-                              value={form.points}
-                              onChange={(e) =>
-                                handleChange(row.id, "points", e.target.value)
-                              }
-                              className="h-10 w-24 rounded-xl border border-white/10 bg-white/5 px-3 text-white outline-none focus:border-emerald-400"
-                            />
-                          </td>
+                      <Toggle label="Active" checked={form.is_active} onChange={(checked) => updateRowField(row.id, "is_active", checked)} />
+                      <Toggle label="Show on Homepage" checked={form.show_on_homepage} onChange={(checked) => updateRowField(row.id, "show_on_homepage", checked)} />
 
-                          <td className="px-4 py-4">
-                            <input
-                              type="number"
-                              value={form.matches}
-                              onChange={(e) =>
-                                handleChange(row.id, "matches", e.target.value)
-                              }
-                              className="h-10 w-24 rounded-xl border border-white/10 bg-white/5 px-3 text-white outline-none focus:border-emerald-400"
-                            />
-                          </td>
-
-                          <td className="px-4 py-4">
-                            <input
-                              type="number"
-                              value={form.wins}
-                              onChange={(e) =>
-                                handleChange(row.id, "wins", e.target.value)
-                              }
-                              className="h-10 w-24 rounded-xl border border-white/10 bg-white/5 px-3 text-white outline-none focus:border-emerald-400"
-                            />
-                          </td>
-
-                          <td className="px-4 py-4">
-                            <input
-                              type="text"
-                              value={form.form}
-                              onChange={(e) =>
-                                handleChange(row.id, "form", e.target.value)
-                              }
-                              placeholder="W W W L W"
-                              className="h-10 w-32 rounded-xl border border-white/10 bg-white/5 px-3 text-white outline-none focus:border-emerald-400"
-                            />
-                          </td>
-
-                          <td className="px-4 py-4">
-                            <input
-                              type="number"
-                              value={form.rating}
-                              onChange={(e) =>
-                                handleChange(row.id, "rating", e.target.value)
-                              }
-                              className="h-10 w-24 rounded-xl border border-white/10 bg-white/5 px-3 text-white outline-none focus:border-emerald-400"
-                            />
-                          </td>
-
-                          <td className="px-4 py-4">
-                            <input
-                              type="text"
-                              value={form.season_label}
-                              onChange={(e) =>
-                                handleChange(
-                                  row.id,
-                                  "season_label",
-                                  e.target.value
-                                )
-                              }
-                              className="h-10 w-40 rounded-xl border border-white/10 bg-white/5 px-3 text-white outline-none focus:border-emerald-400"
-                            />
-                          </td>
-
-                          <td className="px-4 py-4">
-                            <input
-                              type="text"
-                              value={form.team_name_override}
-                              onChange={(e) =>
-                                handleChange(
-                                  row.id,
-                                  "team_name_override",
-                                  e.target.value
-                                )
-                              }
-                              className="h-10 w-40 rounded-xl border border-white/10 bg-white/5 px-3 text-white outline-none focus:border-emerald-400"
-                            />
-                          </td>
-
-                          <td className="px-4 py-4">
-                            <input
-                              type="file"
-                              accept="image/*"
-                              onChange={(e) => {
-                                const file = e.target.files?.[0];
-                                if (file) handleTeamLogoUpload(row.id, file);
-                              }}
-                              className="block w-48 text-sm text-slate-300 file:mr-3 file:rounded-xl file:border-0 file:bg-emerald-500 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-slate-950 hover:file:bg-emerald-400"
-                            />
-                          </td>
-
-                          <td className="px-4 py-4">
-                            <button
-                              onClick={() => saveRow(row.id)}
-                              disabled={savingId === row.id}
-                              className="inline-flex h-10 items-center justify-center rounded-xl bg-emerald-500 px-4 text-sm font-semibold text-slate-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                              {savingId === row.id ? "Saving..." : "Save"}
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </>
+                      <p className="text-xs text-slate-500">Linked team logo remains available as fallback.</p>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
           )}
-        </div>
+        </section>
       </div>
     </div>
   );
 }
 
-function Field({
+function toNumberOrNull(value: string) {
+  const trimmed = value.trim();
+  if (trimmed === "") return null;
+  return Number(trimmed);
+}
+
+function toTextOrNull(value: string) {
+  const trimmed = value.trim();
+  return trimmed === "" ? null : trimmed;
+}
+
+function TextInput({
   label,
   value,
   onChange,
-  type = "text",
+  placeholder,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
-  type?: string;
+  placeholder?: string;
 }) {
   return (
-    <label className="block">
-      <span className="mb-1 block text-xs font-medium text-slate-300">
-        {label}
-      </span>
+    <div>
+      <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">{label}</label>
       <input
-        type={type}
         value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="h-11 w-full rounded-xl border border-white/10 bg-white/5 px-3 text-sm text-white outline-none placeholder:text-slate-500 focus:border-emerald-400"
+        placeholder={placeholder}
+        onChange={(event) => onChange(event.target.value)}
+        className="h-11 w-full rounded-xl border border-white/10 bg-white/5 px-4 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-emerald-400/70 focus:bg-white/10"
       />
+    </div>
+  );
+}
+
+function Toggle({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-200">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+        className="h-4 w-4 accent-emerald-500"
+      />
+      {label}
     </label>
+  );
+}
+
+function StatusPill({ active, label }: { active: boolean; label: string }) {
+  return (
+    <span
+      className={`inline-flex h-10 items-center rounded-xl px-3 text-xs font-bold ${
+        active
+          ? "bg-emerald-500/15 text-emerald-200 ring-1 ring-emerald-400/20"
+          : "bg-slate-500/15 text-slate-300 ring-1 ring-slate-400/10"
+      }`}
+    >
+      {label}
+    </span>
+  );
+}
+
+function SummaryCard({ label, value }: { label: string; value: number | string }) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">{label}</p>
+      <p className="mt-2 text-2xl font-bold text-white">{value}</p>
+    </div>
+  );
+}
+
+function MessageBox({
+  type,
+  children,
+}: {
+  type: "success" | "error";
+  children: React.ReactNode;
+}) {
+  const isSuccess = type === "success";
+  return (
+    <div
+      className={`mb-4 rounded-2xl border px-4 py-3 text-sm ${
+        isSuccess
+          ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-200"
+          : "border-red-500/20 bg-red-500/10 text-red-200"
+      }`}
+    >
+      {children}
+    </div>
   );
 }
