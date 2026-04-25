@@ -23,6 +23,8 @@ type LiveUpdateRow = {
   button_link: string | null;
   sort_order: number | null;
   is_active: boolean | null;
+  show_info_boxes?: boolean | null;
+  show_action_card?: boolean | null;
   created_at?: string | null;
 };
 
@@ -40,6 +42,8 @@ type FormState = {
   button_link: string;
   sort_order: string;
   is_active: boolean;
+  show_info_boxes: boolean;
+  show_action_card: boolean;
 };
 
 const EMPTY_FORM: FormState = {
@@ -56,6 +60,8 @@ const EMPTY_FORM: FormState = {
   button_link: "/matches",
   sort_order: "1",
   is_active: true,
+  show_info_boxes: true,
+  show_action_card: true,
 };
 
 function getFileExtension(fileName: string) {
@@ -85,6 +91,8 @@ function mapRowToForm(row: LiveUpdateRow): FormState {
     button_link: row.button_link || "/matches",
     sort_order: row.sort_order?.toString() || "1",
     is_active: !!row.is_active,
+    show_info_boxes: row.show_info_boxes !== false,
+    show_action_card: row.show_action_card !== false,
   };
 }
 
@@ -216,6 +224,8 @@ export default function AdminHomepageLiveUpdatesPage() {
         button_link: form.button_link.trim() || null,
         sort_order: toNullableNumber(form.sort_order) ?? 1,
         is_active: !!form.is_active,
+        show_info_boxes: !!form.show_info_boxes,
+        show_action_card: !!form.show_action_card,
       };
 
       if (editingId) {
@@ -370,7 +380,7 @@ export default function AdminHomepageLiveUpdatesPage() {
                 <p className="mt-2 text-xs text-slate-500">
                   {uploading
                     ? "Uploading image..."
-                    : "Upload flyer/poster directly from here."}
+                    : "Upload flyer/poster directly from here. For flyer-only mode, uncheck info boxes and bottom action card."}
                 </p>
 
                 {form.image_url ? (
@@ -451,14 +461,38 @@ export default function AdminHomepageLiveUpdatesPage() {
                 />
               </div>
 
-              <label className="flex items-center gap-3 text-sm font-medium text-slate-700">
-                <input
-                  type="checkbox"
-                  checked={form.is_active}
-                  onChange={(e) => updateField("is_active", e.target.checked)}
-                />
-                Active on homepage rotation
-              </label>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={form.is_active}
+                    onChange={(e) => updateField("is_active", e.target.checked)}
+                  />
+                  Active on homepage rotation
+                </label>
+
+                <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={form.show_info_boxes}
+                    onChange={(e) =>
+                      updateField("show_info_boxes", e.target.checked)
+                    }
+                  />
+                  Show info boxes
+                </label>
+
+                <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={form.show_action_card}
+                    onChange={(e) =>
+                      updateField("show_action_card", e.target.checked)
+                    }
+                  />
+                  Show bottom action card
+                </label>
+              </div>
 
               <button
                 onClick={handleSave}

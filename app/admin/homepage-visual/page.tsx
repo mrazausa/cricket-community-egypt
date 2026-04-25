@@ -43,6 +43,18 @@ type FormState = {
   is_active: boolean;
 };
 
+type HeroSettingsForm = {
+  hero_banner_url: string;
+  hero_youtube_url: string;
+  hero_youtube_autoplay: boolean;
+};
+
+const EMPTY_HERO_SETTINGS: HeroSettingsForm = {
+  hero_banner_url: "",
+  hero_youtube_url: "",
+  hero_youtube_autoplay: false,
+};
+
 const EMPTY_FORM: FormState = {
   eyebrow: "MATCHDAY HIGHLIGHT",
   title: "",
@@ -66,7 +78,10 @@ function getFileExtension(fileName: string) {
 
 export default function AdminHomepageVisualPage() {
   const [rowId, setRowId] = useState<string | null>(null);
+  const [settingsRowId, setSettingsRowId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  const [heroSettings, setHeroSettings] =
+    useState<HeroSettingsForm>(EMPTY_HERO_SETTINGS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -76,6 +91,7 @@ export default function AdminHomepageVisualPage() {
 
   useEffect(() => {
     loadVisual();
+    loadHeroSettings();
   }, []);
 
   async function loadVisual() {
@@ -122,6 +138,95 @@ export default function AdminHomepageVisualPage() {
     }
 
     setLoading(false);
+  }
+
+  async function loadHeroSettings() {
+    const { data, error } = await supabase
+      .from("homepage_settings")
+      .select("id, hero_banner_url, hero_youtube_url, hero_youtube_autoplay")
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      console.error(error);
+      return;
+    }
+
+    if (data) {
+      setSettingsRowId(data.id || null);
+      setHeroSettings({
+        hero_banner_url: data.hero_banner_url || "",
+        hero_youtube_url: data.hero_youtube_url || "",
+        hero_youtube_autoplay: data.hero_youtube_autoplay === true,
+      });
+    }
+  }
+
+  async function handleHeroBannerUpload(file: File) {
+    try {
+      setUploading(true);
+      setMessage("");
+      setErrorText("");
+
+      const ext = getFileExtension(file.name);
+      const filePath = `homepage/hero-banner-${Date.now()}.${ext}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from(MEDIA_BUCKET)
+        .upload(filePath, file, {
+          cacheControl: "3600",
+          upsert: true,
+        });
+
+      if (uploadError) throw uploadError;
+
+      const { data } = supabase.storage.from(MEDIA_BUCKET).getPublicUrl(filePath);
+      const publicUrl = data.publicUrl;
+
+      setHeroSettings((prev) => ({ ...prev, hero_banner_url: publicUrl }));
+      setMessage("Hero banner uploaded. Click Save Hero Media to publish it.");
+    } catch (error: any) {
+      setErrorText(error?.message || "Hero banner upload failed.");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function handleSaveHeroSettings() {
+    try {
+      setSaving(true);
+      setMessage("");
+      setErrorText("");
+
+      const payload = {
+        hero_banner_url: heroSettings.hero_banner_url.trim() || null,
+        hero_youtube_url: heroSettings.hero_youtube_url.trim() || null,
+        hero_youtube_autoplay: !!heroSettings.hero_youtube_autoplay,
+      };
+
+      if (settingsRowId) {
+        const { error } = await supabase
+          .from("homepage_settings")
+          .update(payload)
+          .eq("id", settingsRowId);
+        if (error) throw error;
+      } else {
+        const { data, error } = await supabase
+          .from("homepage_settings")
+          .insert(payload)
+          .select("id")
+          .single();
+        if (error) throw error;
+        setSettingsRowId(data.id);
+      }
+
+      setMessage("Hero media settings saved successfully.");
+      await loadHeroSettings();
+    } catch (error: any) {
+      setErrorText(error?.message || "Failed to save hero media settings.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function handleImageUpload(file: File) {
@@ -218,16 +323,108 @@ export default function AdminHomepageVisualPage() {
             Homepage Visual Update
           </p>
           <h1 className="max-w-3xl text-3xl font-bold leading-tight sm:text-5xl">
-            Manage the right-side homepage flyer and match-day highlight block.
+            Manage the left hero media and right-side homepage flyer blocks.
           </h1>
           <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-200 sm:text-base">
-            Use this for match-day flyers, player of the match announcements,
-            result posters, or any important visual highlight.
+            Use this for tournament banner, YouTube moments, match-day flyers, result posters, or any important visual highlight.
           </p>
         </div>
       </section>
 
       <section className="mx-auto max-w-7xl px-4 pb-10 sm:px-6 lg:px-8">
+        <div className="mb-6 rounded-3xl bg-white p-6 shadow-md ring-1 ring-slate-200">
+          <div className="mb-5">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700">
+              Left Hero Media
+            </p>
+            <h2 className="mt-1 text-2xl font-bold">Tournament banner or YouTube video</h2>
+            <p className="mt-2 text-sm text-slate-600">
+              This controls the big left homepage media area. Add a YouTube link for a video, or upload a static tournament banner.
+            </p>
+          </div>
+
+          {message ? (
+            <div className="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+              {message}
+            </div>
+          ) : null}
+
+          {errorText ? (
+            <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {errorText}
+            </div>
+          ) : null}
+
+          <div className="grid gap-5 lg:grid-cols-[1.2fr_0.8fr]">
+            <div className="grid gap-4">
+              <Field
+                label="Hero YouTube URL"
+                value={heroSettings.hero_youtube_url}
+                onChange={(value) =>
+                  setHeroSettings((prev) => ({ ...prev, hero_youtube_url: value }))
+                }
+              />
+
+              <Field
+                label="Hero Banner Image URL"
+                value={heroSettings.hero_banner_url}
+                onChange={(value) =>
+                  setHeroSettings((prev) => ({ ...prev, hero_banner_url: value }))
+                }
+              />
+
+              <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={heroSettings.hero_youtube_autoplay}
+                  onChange={(e) =>
+                    setHeroSettings((prev) => ({
+                      ...prev,
+                      hero_youtube_autoplay: e.target.checked,
+                    }))
+                  }
+                />
+                Autoplay YouTube video on homepage
+              </label>
+
+              <button
+                onClick={handleSaveHeroSettings}
+                disabled={saving || uploading}
+                className="inline-flex h-12 items-center justify-center rounded-2xl bg-slate-900 px-5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {saving ? "Saving..." : "Save Hero Media"}
+              </button>
+            </div>
+
+            <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+              <h3 className="text-lg font-bold text-slate-900">Upload Static Banner</h3>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleHeroBannerUpload(file);
+                }}
+                className="mt-4 block w-full text-sm text-slate-600 file:mr-4 file:rounded-xl file:border-0 file:bg-emerald-600 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-emerald-700"
+              />
+
+              {heroSettings.hero_banner_url ? (
+                <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white p-3">
+                  <img
+                    src={heroSettings.hero_banner_url}
+                    alt="Hero banner preview"
+                    className="max-h-72 w-full rounded-xl object-contain"
+                  />
+                </div>
+              ) : (
+                <div className="mt-4 rounded-2xl border border-dashed border-slate-300 px-4 py-10 text-center text-sm text-slate-500">
+                  No static banner uploaded yet.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
         <div className="rounded-3xl bg-white p-6 shadow-md ring-1 ring-slate-200">
           {loading ? (
             <div className="text-sm text-slate-500">Loading homepage visual...</div>

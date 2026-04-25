@@ -49,6 +49,10 @@ type HomepageSettingsRow = {
   hero_custom_meta_3_label?: string | null;
   hero_custom_meta_3_value?: string | null;
 
+  hero_youtube_url?: string | null;
+  hero_youtube_autoplay?: boolean | null;
+  hero_banner_url?: string | null;
+
   hero_badge?: string | null;
   hero_launch_note_title?: string | null;
   hero_launch_note_text?: string | null;
@@ -763,6 +767,25 @@ export default function HomePage() {
   const latestNewsLink = latestNews.length > 0 ? "/news" : "";
   const rankingsLink = "/rankings";
   const heroMode = getHeroMode(homepageSettings);
+  const activeLiveUpdate = liveUpdates[currentIndex] || null;
+  const heroTitle = getHomepageHeroTitle(
+    heroMode,
+    homepageSettings,
+    featuredTournament,
+    latestNews
+  );
+  const heroSubtitle = getHomepageHeroSubtitle(
+    heroMode,
+    homepageSettings,
+    featuredTournament,
+    latestNews
+  );
+  const heroPrimaryImage = getHomepageHeroImage(
+    heroMode,
+    homepageSettings,
+    featuredTournament,
+    latestNews
+  );
 
   return (
     <main className="min-h-screen bg-[#f4f7fb] text-slate-900">
@@ -774,509 +797,136 @@ export default function HomePage() {
             className="mx-auto w-full max-w-7xl px-4 py-5 sm:px-6 lg:px-8 lg:py-8"
             style={{ order: homepageSettings.hero_order ?? 1 }}
           >
-            <div className="grid gap-5 lg:grid-cols-[1.75fr_0.9fr] lg:items-stretch">
-              <div
-                className="h-full overflow-hidden rounded-[30px] bg-gradient-to-br from-slate-950 via-[#02103a] to-emerald-900 p-6 text-white shadow-2xl sm:p-8 lg:p-7"
-                style={{
-                  minHeight: `${featuredTournament.hero_min_height_desktop ?? 520}px`,
-                  height: "fit-content",
-                }}
-              >
-                {heroMode === "custom_highlight" ? (
-                  <>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="rounded-full bg-emerald-400/15 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-emerald-200">
-                        {homepageSettings.hero_custom_badge ||
-                          homepageSettings.hero_badge ||
-                          fallbackHomepageSettings.hero_badge}
-                      </span>
-                      <span className="rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold text-slate-200">
-                        Highlight
-                      </span>
-                    </div>
+            <div className="grid gap-5 lg:grid-cols-[1.65fr_0.85fr] lg:items-stretch">
+              <div className="flex min-h-[560px] flex-col overflow-hidden rounded-[30px] bg-gradient-to-br from-slate-950 via-[#02103a] to-emerald-900 p-6 text-white shadow-2xl sm:p-8 lg:h-[640px] lg:p-7">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded-full bg-emerald-400/15 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-emerald-200">
+                    {heroMode === "news_highlight"
+                      ? "News Highlight"
+                      : homepageSettings.hero_custom_badge ||
+                        homepageSettings.hero_badge ||
+                        fallbackHomepageSettings.hero_badge}
+                  </span>
+                  <span className="rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold text-slate-200">
+                    {heroMode === "custom_highlight"
+                      ? "Highlight"
+                      : formatTournamentStatus(featuredTournament.status)}
+                  </span>
+                </div>
 
-                    <div className="mt-6 flex flex-col items-center text-center">
-                      {homepageSettings.hero_custom_image_url ? (
-                        <img
-                          src={homepageSettings.hero_custom_image_url}
-                          alt={
-                            homepageSettings.hero_custom_title ||
-                            "Custom highlight"
-                          }
-                          className="max-h-[220px] rounded-2xl object-contain drop-shadow-[0_10px_30px_rgba(0,0,0,0.45)]"
-                        />
-                      ) : null}
+                <HeroMediaBlock
+                  youtubeUrl={homepageSettings.hero_youtube_url || ""}
+                  autoplay={homepageSettings.hero_youtube_autoplay === true}
+                  imageUrl={heroPrimaryImage}
+                  title={heroTitle}
+                />
 
-                      <h1
-                        className="mt-6 font-bold leading-tight text-white"
-                        style={{
-                          maxWidth: `${featuredTournament.hero_title_max_width ?? 900}px`,
-                          fontSize: `clamp(${featuredTournament.hero_title_font_mobile ?? 32}px, 5vw, ${featuredTournament.hero_title_font_desktop ?? 60}px)`,
-                          textAlign: "center",
-                        }}
-                      >
-                        {homepageSettings.hero_custom_title || "Community Highlight"}
-                      </h1>
+                <div className="mt-auto">
+                  <h1
+                    className="font-bold leading-tight text-white"
+                    style={{
+                      maxWidth: `${featuredTournament.hero_title_max_width ?? 900}px`,
+                      fontSize: `clamp(${featuredTournament.hero_title_font_mobile ?? 32}px, 5vw, ${featuredTournament.hero_title_font_desktop ?? 60}px)`,
+                      whiteSpace: "normal",
+                      overflowWrap: "break-word",
+                      textAlign:
+                        featuredTournament.hero_title_align === "left" ||
+                        featuredTournament.hero_title_align === "right"
+                          ? featuredTournament.hero_title_align
+                          : "center",
+                      marginLeft:
+                        featuredTournament.hero_title_align === "left" ? 0 : "auto",
+                      marginRight:
+                        featuredTournament.hero_title_align === "right" ? 0 : "auto",
+                    }}
+                  >
+                    {heroTitle}
+                  </h1>
 
-                      <p
-                        className="text-slate-200"
-                        style={{
-                          marginTop: `${featuredTournament.hero_subtitle_top_margin ?? 16}px`,
-                          maxWidth: `${featuredTournament.hero_subtitle_max_width ?? 700}px`,
-                          fontSize: `clamp(${featuredTournament.hero_subtitle_font_mobile ?? 16}px, 2vw, ${featuredTournament.hero_subtitle_font_desktop ?? 18}px)`,
-                          lineHeight: 1.6,
-                          textAlign: "center",
-                        }}
-                      >
-                        {homepageSettings.hero_custom_subtitle ||
-                          "Latest featured community update will appear here."}
-                      </p>
-                    </div>
+                  <p
+                    className="text-slate-200"
+                    style={{
+                      marginTop: `${featuredTournament.hero_subtitle_top_margin ?? 16}px`,
+                      maxWidth: `${featuredTournament.hero_subtitle_max_width ?? 700}px`,
+                      fontSize: `clamp(${featuredTournament.hero_subtitle_font_mobile ?? 16}px, 2vw, ${featuredTournament.hero_subtitle_font_desktop ?? 18}px)`,
+                      lineHeight: 1.6,
+                      textAlign:
+                        featuredTournament.hero_title_align === "left" ||
+                        featuredTournament.hero_title_align === "right"
+                          ? featuredTournament.hero_title_align
+                          : "center",
+                      marginLeft:
+                        featuredTournament.hero_title_align === "left" ? 0 : "auto",
+                      marginRight:
+                        featuredTournament.hero_title_align === "right" ? 0 : "auto",
+                    }}
+                  >
+                    {heroSubtitle}
+                  </p>
 
-                    <div className="mt-6 grid gap-3 sm:grid-cols-3">
-                      <HeroInfo
-                        label={homepageSettings.hero_custom_meta_1_label || "Highlight"}
-                        value={
-                          homepageSettings.hero_custom_meta_1_value ||
-                          "To be announced"
-                        }
-                      />
-                      <HeroInfo
-                        label={homepageSettings.hero_custom_meta_2_label || "Date"}
-                        value={
-                          homepageSettings.hero_custom_meta_2_value ||
-                          "To be announced"
-                        }
-                      />
-                      <HeroInfo
-                        label={homepageSettings.hero_custom_meta_3_label || "Venue"}
-                        value={
-                          homepageSettings.hero_custom_meta_3_value ||
-                          "To be announced"
-                        }
-                      />
-                    </div>
+                  <div className="mt-6 grid gap-3 sm:grid-cols-3">
+                    <HeroInfo
+                      label="Timeline"
+                      value={featuredTournament.timeline || "To be announced"}
+                    />
+                    <HeroInfo
+                      label="Venue"
+                      value={featuredTournament.venue || "Venue update soon"}
+                    />
+                    <HeroInfo
+                      label="Format"
+                      value={featuredTournament.format || "Tournament"}
+                    />
+                  </div>
 
-                    <div
-                      className="grid gap-3 sm:grid-cols-2"
-                      style={{
-                        marginTop: `${featuredTournament.hero_buttons_top_margin ?? 24}px`,
-                      }}
+                  <div
+                    className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
+                    style={{
+                      marginTop: `${featuredTournament.hero_buttons_top_margin ?? 24}px`,
+                    }}
+                  >
+                    <a
+                      href={tournamentLink}
+                      className="inline-flex h-12 items-center justify-center rounded-2xl bg-emerald-500 px-5 text-sm font-semibold text-white transition hover:bg-emerald-600"
                     >
-                      <a
-                        href={homepageSettings.hero_custom_cta_link || "/news"}
-                        className="inline-flex h-12 items-center justify-center rounded-2xl bg-emerald-500 px-5 text-sm font-semibold text-white transition hover:bg-emerald-600"
-                      >
-                        {homepageSettings.hero_custom_cta_text || "Explore Now"}
-                      </a>
+                      View Tournament
+                    </a>
 
-                      <a
-                        href="/news"
-                        className="inline-flex h-12 items-center justify-center rounded-2xl border border-white/20 bg-white/10 px-5 text-sm font-semibold text-white transition hover:bg-white/20"
-                      >
-                        Latest News
-                      </a>
-                    </div>
-                  </>
-                ) : heroMode === "news_highlight" && latestNews.length > 0 ? (
-                  <>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="rounded-full bg-emerald-400/15 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-emerald-200">
-                        News Highlight
-                      </span>
-                      <span className="rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold text-slate-200">
-                        Featured Story
-                      </span>
-                    </div>
-
-                    <div className="mt-6 flex flex-col items-center text-center">
-                      {latestNews[0]?.image_url ? (
-                        <img
-                          src={latestNews[0].image_url}
-                          alt={latestNews[0].title}
-                          className="max-h-[220px] rounded-2xl object-contain drop-shadow-[0_10px_30px_rgba(0,0,0,0.45)]"
-                        />
-                      ) : featuredTournament.logo_url ? (
-                        <img
-                          src={featuredTournament.logo_url}
-                          alt={featuredTournament.title || "Featured Tournament"}
-                          className="object-contain drop-shadow-[0_10px_30px_rgba(0,0,0,0.45)]"
-                          style={{
-                            width: `clamp(${featuredTournament.hero_logo_size_mobile ?? 120}px, 18vw, ${featuredTournament.hero_logo_size_desktop ?? 200}px)`,
-                            height: `clamp(${featuredTournament.hero_logo_size_mobile ?? 120}px, 18vw, ${featuredTournament.hero_logo_size_desktop ?? 200}px)`,
-                          }}
-                        />
-                      ) : null}
-
-                      <h1
-                        className="mt-6 font-bold leading-tight text-white"
-                        style={{
-                          maxWidth: `${featuredTournament.hero_title_max_width ?? 900}px`,
-                          fontSize: `clamp(${featuredTournament.hero_title_font_mobile ?? 32}px, 5vw, ${featuredTournament.hero_title_font_desktop ?? 60}px)`,
-                          textAlign: "center",
-                        }}
-                      >
-                        {latestNews[0]?.title || "Featured News"}
-                      </h1>
-
-                      <p
-                        className="text-slate-200"
-                        style={{
-                          marginTop: `${featuredTournament.hero_subtitle_top_margin ?? 16}px`,
-                          maxWidth: `${featuredTournament.hero_subtitle_max_width ?? 700}px`,
-                          fontSize: `clamp(${featuredTournament.hero_subtitle_font_mobile ?? 16}px, 2vw, ${featuredTournament.hero_subtitle_font_desktop ?? 18}px)`,
-                          lineHeight: 1.6,
-                          textAlign: "center",
-                        }}
-                      >
-                        {latestNews[0]?.body ||
-                          "Latest featured news from the platform."}
-                      </p>
-                    </div>
-
-                    <div className="mt-6 grid gap-3 sm:grid-cols-3">
-                      <HeroInfo label="Category" value="Featured News" />
-                      <HeroInfo
-                        label="Tournament"
-                        value={featuredTournament.title || "Platform Update"}
-                      />
-                      <HeroInfo label="Status" value="Published" />
-                    </div>
-
-                    <div
-                      className="grid gap-3 sm:grid-cols-2"
-                      style={{
-                        marginTop: `${featuredTournament.hero_buttons_top_margin ?? 24}px`,
-                      }}
+                    <a
+                      href={nextMatchLink || tournamentLink}
+                      target={nextMatchLink ? "_blank" : undefined}
+                      rel={nextMatchLink ? "noreferrer" : undefined}
+                      className="inline-flex h-12 items-center justify-center rounded-2xl border border-white/20 bg-white/10 px-5 text-sm font-semibold text-white transition hover:bg-white/20"
                     >
-                      <a
-                        href="/news"
-                        className="inline-flex h-12 items-center justify-center rounded-2xl bg-emerald-500 px-5 text-sm font-semibold text-white transition hover:bg-emerald-600"
-                      >
-                        Read Latest News
-                      </a>
+                      {upcomingMatches.length > 0 ? "Next Match" : "Match Center"}
+                    </a>
 
-                      <a
-                        href={tournamentLink}
-                        className="inline-flex h-12 items-center justify-center rounded-2xl border border-white/20 bg-white/10 px-5 text-sm font-semibold text-white transition hover:bg-white/20"
-                      >
-                        View Tournament
-                      </a>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="rounded-full bg-emerald-400/15 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-emerald-200">
-                        {homepageSettings.hero_badge ||
-                          fallbackHomepageSettings.hero_badge}
-                      </span>
-                      <span className="rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold text-slate-200">
-                        {formatTournamentStatus(featuredTournament.status)}
-                      </span>
-                    </div>
-
-                    <div
-                      className={`mt-5 flex flex-col ${getHeroAlignClass(
-                        featuredTournament.hero_title_align
-                      )}`}
-                      style={{
-                        marginTop: `${featuredTournament.hero_logo_top_margin ?? 10}px`,
-                      }}
+                    <a
+                      href={latestNewsLink || "/news"}
+                      className="inline-flex h-12 items-center justify-center rounded-2xl border border-white/20 bg-white/10 px-5 text-sm font-semibold text-white transition hover:bg-white/20"
                     >
-                      {featuredTournament.logo_url ? (
-                        <img
-                          src={featuredTournament.logo_url}
-                          alt={featuredTournament.title || "Featured Tournament"}
-                          className="object-contain drop-shadow-[0_10px_30px_rgba(0,0,0,0.45)]"
-                          style={{
-                            width: `clamp(${featuredTournament.hero_logo_size_mobile ?? 120}px, 18vw, ${featuredTournament.hero_logo_size_desktop ?? 200}px)`,
-                            height: `clamp(${featuredTournament.hero_logo_size_mobile ?? 120}px, 18vw, ${featuredTournament.hero_logo_size_desktop ?? 200}px)`,
-                          }}
-                        />
-                      ) : null}
+                      Latest News
+                    </a>
 
-                      <h1
-                        className="mt-4 font-bold leading-tight text-white"
-                        style={{
-                          maxWidth: `${featuredTournament.hero_title_max_width ?? 900}px`,
-                          fontSize: `clamp(${featuredTournament.hero_title_font_mobile ?? 32}px, 5vw, ${featuredTournament.hero_title_font_desktop ?? 60}px)`,
-                          whiteSpace: "normal",
-                          overflowWrap: "break-word",
-                          textAlign:
-                            featuredTournament.hero_title_align === "left" ||
-                            featuredTournament.hero_title_align === "right"
-                              ? featuredTournament.hero_title_align
-                              : "center",
-                        }}
-                      >
-                        {featuredTournament.title || "Premium Cricket Platform"}
-                      </h1>
-
-                      <p
-                        className="text-slate-200"
-                        style={{
-                          marginTop: `${featuredTournament.hero_subtitle_top_margin ?? 16}px`,
-                          maxWidth: `${featuredTournament.hero_subtitle_max_width ?? 700}px`,
-                          fontSize: `clamp(${featuredTournament.hero_subtitle_font_mobile ?? 16}px, 2vw, ${featuredTournament.hero_subtitle_font_desktop ?? 18}px)`,
-                          lineHeight: 1.6,
-                          textAlign:
-                            featuredTournament.hero_title_align === "left" ||
-                            featuredTournament.hero_title_align === "right"
-                              ? featuredTournament.hero_title_align
-                              : "center",
-                        }}
-                      >
-                        {featuredTournament.overview ||
-                          "Tournament overview will be updated soon."}
-                      </p>
-                    </div>
-
-                    <div className="mt-6 grid gap-3 sm:grid-cols-3">
-                      <HeroInfo
-                        label="Timeline"
-                        value={featuredTournament.timeline || "To be announced"}
-                      />
-                      <HeroInfo
-                        label="Venue"
-                        value={featuredTournament.venue || "Venue update soon"}
-                      />
-                      <HeroInfo
-                        label="Format"
-                        value={featuredTournament.format || "Tournament"}
-                      />
-                    </div>
-
-                    <div
-                      className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
-                      style={{
-                        marginTop: `${featuredTournament.hero_buttons_top_margin ?? 24}px`,
-                      }}
+                    <a
+                      href={rankingsLink}
+                      className="inline-flex h-12 items-center justify-center rounded-2xl border border-white/20 bg-white/10 px-5 text-sm font-semibold text-white transition hover:bg-white/20"
                     >
-                      <a
-                        href={tournamentLink}
-                        className="inline-flex h-12 items-center justify-center rounded-2xl bg-emerald-500 px-5 text-sm font-semibold text-white transition hover:bg-emerald-600"
-                      >
-                        View Tournament
-                      </a>
-
-                      {nextMatchLink ? (
-                        <a
-                          href={nextMatchLink}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex h-12 items-center justify-center rounded-2xl border border-white/20 bg-white/10 px-5 text-sm font-semibold text-white transition hover:bg-white/20"
-                        >
-                          {upcomingMatches.length > 0 ? "Next Match" : "Match Center"}
-                        </a>
-                      ) : (
-                        <a
-                          href={tournamentLink}
-                          className="inline-flex h-12 items-center justify-center rounded-2xl border border-white/20 bg-white/10 px-5 text-sm font-semibold text-white transition hover:bg-white/20"
-                        >
-                          {upcomingMatches.length > 0 ? "Next Match" : "Match Center"}
-                        </a>
-                      )}
-
-                      <a
-                        href={latestNewsLink || "/news"}
-                        className="inline-flex h-12 items-center justify-center rounded-2xl border border-white/20 bg-white/10 px-5 text-sm font-semibold text-white transition hover:bg-white/20"
-                      >
-                        Latest News
-                      </a>
-
-                      <a
-                        href={rankingsLink}
-                        className="inline-flex h-12 items-center justify-center rounded-2xl border border-white/20 bg-white/10 px-5 text-sm font-semibold text-white transition hover:bg-white/20"
-                      >
-                        Rankings
-                      </a>
-                    </div>
-                  </>
-                )}
+                      Rankings
+                    </a>
+                  </div>
+                </div>
               </div>
 
-              <div className="h-full min-h-[520px] max-h-[620px] overflow-y-auto rounded-[30px] bg-white p-5 shadow-xl ring-1 ring-slate-200 sm:p-6 lg:p-6">
-                {liveUpdates.length > 0 ? (
-                  <>
-                    <div className="flex items-center justify-between">
-                      <h2 className="text-xl font-bold">
-                        {liveUpdates[currentIndex]?.title || "Live Updates"}
-                      </h2>
-                      <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
-                        Live Update
-                      </span>
-                    </div>
-
-                    {liveUpdates[currentIndex]?.image_url ? (
-                      <div className="mt-4 overflow-hidden rounded-3xl border border-slate-200">
-                        <img
-                          src={liveUpdates[currentIndex].image_url}
-                          alt={liveUpdates[currentIndex].title || "Live update"}
-                          className="h-[230px] w-full object-cover sm:h-[280px] lg:h-[260px]"
-                        />
-                      </div>
-                    ) : null}
-
-                    <div className="mt-4 grid gap-3 lg:gap-2">
-                      <MiniInfo
-                        label={liveUpdates[currentIndex]?.info_1_label || "Info 1"}
-                        value={
-                          liveUpdates[currentIndex]?.info_1_value ||
-                          "To be announced"
-                        }
-                      />
-                      <MiniInfo
-                        label={liveUpdates[currentIndex]?.info_2_label || "Info 2"}
-                        value={
-                          liveUpdates[currentIndex]?.info_2_value ||
-                          "To be announced"
-                        }
-                      />
-                      <MiniInfo
-                        label={liveUpdates[currentIndex]?.info_3_label || "Info 3"}
-                        value={
-                          liveUpdates[currentIndex]?.info_3_value ||
-                          "To be announced"
-                        }
-                      />
-                    </div>
-
-                    <div className="mt-5 rounded-3xl bg-slate-950 p-4 text-white lg:mt-3 lg:p-3.5">
-                      <p className="text-lg font-bold">
-                        {liveUpdates[currentIndex]?.title || "Latest Update"}
-                      </p>
-                      <p className="mt-2 text-sm leading-6 text-slate-300">
-                        {liveUpdates[currentIndex]?.subtitle ||
-                          "Stay tuned for the latest update."}
-                      </p>
-
-                      <a
-                        href={liveUpdates[currentIndex]?.button_link || "/matches"}
-                        className="mt-4 inline-flex h-11 items-center justify-center rounded-2xl bg-emerald-500 px-4 text-sm font-semibold text-slate-950 transition hover:bg-emerald-400"
-                      >
-                        {liveUpdates[currentIndex]?.button_text || "Open"}
-                      </a>
-
-                      {liveUpdates.length > 1 ? (
-                        <div className="mt-4 flex items-center gap-2">
-                          {liveUpdates.map((_, index) => (
-                            <button
-                              key={index}
-                              type="button"
-                              onClick={() => setCurrentIndex(index)}
-                              className={`h-2.5 w-2.5 rounded-full transition ${
-                                index === currentIndex
-                                  ? "bg-emerald-400"
-                                  : "bg-white/30"
-                              }`}
-                              aria-label={`Go to update ${index + 1}`}
-                            />
-                          ))}
-                        </div>
-                      ) : null}
-                    </div>
-                  </>
-                ) : homepageFeaturedVisual ? (
-                  <>
-                    <div className="flex items-center justify-between">
-                      <h2 className="text-xl font-bold">
-                        {homepageFeaturedVisual.eyebrow || "Matchday Highlight"}
-                      </h2>
-                      <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
-                        Live Update
-                      </span>
-                    </div>
-
-                    {homepageFeaturedVisual.image_url ? (
-                      <div className="mt-4 overflow-hidden rounded-3xl border border-slate-200">
-                        <img
-                          src={homepageFeaturedVisual.image_url}
-                          alt={homepageFeaturedVisual.title || "Homepage visual"}
-                          className="w-full object-contain"
-                        />
-                      </div>
-                    ) : null}
-
-                    <div className="mt-4 grid gap-3 lg:gap-2">
-                      <MiniInfo
-                        label={homepageFeaturedVisual.info_1_label || "Info 1"}
-                        value={
-                          homepageFeaturedVisual.info_1_value || "To be announced"
-                        }
-                      />
-                      <MiniInfo
-                        label={homepageFeaturedVisual.info_2_label || "Info 2"}
-                        value={
-                          homepageFeaturedVisual.info_2_value || "To be announced"
-                        }
-                      />
-                      <MiniInfo
-                        label={homepageFeaturedVisual.info_3_label || "Info 3"}
-                        value={
-                          homepageFeaturedVisual.info_3_value || "To be announced"
-                        }
-                      />
-                    </div>
-
-                    <div className="mt-5 rounded-3xl bg-slate-950 p-4 text-white lg:mt-3 lg:p-3.5">
-                      <p className="text-lg font-bold">
-                        {homepageFeaturedVisual.title || "Latest Visual Update"}
-                      </p>
-                      <p className="mt-2 text-sm leading-6 text-slate-300">
-                        {homepageFeaturedVisual.subtitle ||
-                          "Stay tuned for the latest cricket update."}
-                      </p>
-
-                      <a
-                        href={homepageFeaturedVisual.button_link || "/matches"}
-                        className="mt-4 inline-flex h-11 items-center justify-center rounded-2xl bg-emerald-500 px-4 text-sm font-semibold text-slate-950 transition hover:bg-emerald-400"
-                      >
-                        {homepageFeaturedVisual.button_text || "Open Match Center"}
-                      </a>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div className="flex items-center justify-between">
-                      <h2 className="text-xl font-bold">Tournament Snapshot</h2>
-                      <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
-                        {formatTournamentStatus(featuredTournament.status)}
-                      </span>
-                    </div>
-
-                    <div className="mt-4 space-y-3">
-                      <QuickStat
-                        label="Featured Tournament"
-                        value={featuredTournament.title || "Premium Cricket Platform"}
-                      />
-                      <QuickStat
-                        label="Tournament Window"
-                        value={featuredTournament.timeline || "To be announced"}
-                      />
-                      <QuickStat
-                        label="Venue"
-                        value={featuredTournament.venue || "Venue update soon"}
-                      />
-                      <QuickStat
-                        label="Format"
-                        value={featuredTournament.format || "Tournament"}
-                      />
-                    </div>
-
-                    <div className="mt-5 rounded-3xl bg-slate-950 p-4 text-white lg:mt-3 lg:p-3.5">
-                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-300">
-                        {homepageSettings.hero_launch_note_title ||
-                          fallbackHomepageSettings.hero_launch_note_title}
-                      </p>
-                      <p className="mt-2 text-sm leading-6 text-slate-300">
-                        {homepageSettings.hero_launch_note_text ||
-                          fallbackHomepageSettings.hero_launch_note_text}
-                      </p>
-                    </div>
-                  </>
-                )}
-              </div>
+              <HomepageLiveUpdatePanel
+                activeLiveUpdate={activeLiveUpdate}
+                liveUpdates={liveUpdates}
+                currentIndex={currentIndex}
+                setCurrentIndex={setCurrentIndex}
+                featuredVisual={homepageFeaturedVisual}
+                featuredTournament={featuredTournament}
+                homepageSettings={homepageSettings}
+              />
             </div>
           </section>
         )}
@@ -1792,6 +1442,288 @@ export default function HomePage() {
 
       <SiteFooter />
     </main>
+  );
+}
+
+
+function getYoutubeEmbedUrl(url: string, autoplay: boolean) {
+  const trimmed = url.trim();
+  if (!trimmed) return "";
+
+  let videoId = "";
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.hostname.includes("youtu.be")) {
+      videoId = parsed.pathname.replace("/", "");
+    } else if (parsed.hostname.includes("youtube.com")) {
+      videoId = parsed.searchParams.get("v") || "";
+      if (!videoId && parsed.pathname.includes("/embed/")) {
+        videoId = parsed.pathname.split("/embed/")[1]?.split("/")[0] || "";
+      }
+      if (!videoId && parsed.pathname.includes("/shorts/")) {
+        videoId = parsed.pathname.split("/shorts/")[1]?.split("/")[0] || "";
+      }
+    }
+  } catch {
+    videoId = trimmed;
+  }
+
+  if (!videoId) return "";
+  const params = new URLSearchParams({
+    rel: "0",
+    modestbranding: "1",
+    playsinline: "1",
+  });
+
+  if (autoplay) {
+    params.set("autoplay", "1");
+    params.set("mute", "1");
+  }
+
+  return `https://www.youtube.com/embed/${videoId}?${params.toString()}`;
+}
+
+function getHomepageHeroTitle(
+  heroMode: string,
+  settings: HomepageSettingsRow,
+  tournament: TournamentRow,
+  latestNews: NewsRow[]
+) {
+  if (heroMode === "custom_highlight") {
+    return settings.hero_custom_title || "Community Highlight";
+  }
+  if (heroMode === "news_highlight" && latestNews.length > 0) {
+    return latestNews[0]?.title || "Featured News";
+  }
+  return tournament.title || "Premium Cricket Platform";
+}
+
+function getHomepageHeroSubtitle(
+  heroMode: string,
+  settings: HomepageSettingsRow,
+  tournament: TournamentRow,
+  latestNews: NewsRow[]
+) {
+  if (heroMode === "custom_highlight") {
+    return (
+      settings.hero_custom_subtitle ||
+      "Latest featured community update will appear here."
+    );
+  }
+  if (heroMode === "news_highlight" && latestNews.length > 0) {
+    return latestNews[0]?.body || "Latest featured news from the platform.";
+  }
+  return tournament.overview || "Tournament overview will be updated soon.";
+}
+
+function getHomepageHeroImage(
+  heroMode: string,
+  settings: HomepageSettingsRow,
+  tournament: TournamentRow,
+  latestNews: NewsRow[]
+) {
+  if (settings.hero_banner_url) return settings.hero_banner_url;
+  if (heroMode === "custom_highlight" && settings.hero_custom_image_url) {
+    return settings.hero_custom_image_url;
+  }
+  if (heroMode === "news_highlight" && latestNews[0]?.image_url) {
+    return latestNews[0].image_url;
+  }
+  return tournament.logo_url || "";
+}
+
+function HeroMediaBlock({
+  youtubeUrl,
+  autoplay,
+  imageUrl,
+  title,
+}: {
+  youtubeUrl: string;
+  autoplay: boolean;
+  imageUrl: string;
+  title: string;
+}) {
+  const embedUrl = getYoutubeEmbedUrl(youtubeUrl, autoplay);
+
+  return (
+    <div className="my-6 flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-3xl bg-black/15 ring-1 ring-white/10">
+      {embedUrl ? (
+        <iframe
+          src={embedUrl}
+          title={title || "Tournament video"}
+          className="h-full min-h-[220px] w-full rounded-3xl"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          allowFullScreen
+        />
+      ) : imageUrl ? (
+        <img
+          src={imageUrl}
+          alt={title || "Tournament banner"}
+          className="h-full max-h-[260px] w-full object-contain drop-shadow-[0_10px_30px_rgba(0,0,0,0.45)] lg:max-h-[300px]"
+        />
+      ) : (
+        <div className="px-6 text-center text-sm text-slate-300">
+          Upload a tournament banner or add a YouTube link from admin.
+        </div>
+      )}
+    </div>
+  );
+}
+
+function hasInfoBoxes(update: any) {
+  if (!update) return false;
+  if (update.show_info_boxes === false) return false;
+  return Boolean(
+    update.info_1_value ||
+      update.info_2_value ||
+      update.info_3_value ||
+      update.info_1_label ||
+      update.info_2_label ||
+      update.info_3_label
+  );
+}
+
+function HomepageLiveUpdatePanel({
+  activeLiveUpdate,
+  liveUpdates,
+  currentIndex,
+  setCurrentIndex,
+  featuredVisual,
+  featuredTournament,
+  homepageSettings,
+}: {
+  activeLiveUpdate: any | null;
+  liveUpdates: any[];
+  currentIndex: number;
+  setCurrentIndex: (index: number) => void;
+  featuredVisual: HomepageFeaturedVisualRow | null;
+  featuredTournament: TournamentRow;
+  homepageSettings: HomepageSettingsRow;
+}) {
+  const update = activeLiveUpdate || featuredVisual;
+  const title = update?.title || featuredTournament.title || "Tournament Snapshot";
+  const subtitle = update?.subtitle || "Stay tuned for the latest cricket update.";
+  const imageUrl = update?.image_url || "";
+  const showInfo = activeLiveUpdate ? hasInfoBoxes(activeLiveUpdate) : true;
+  const showAction = activeLiveUpdate
+    ? activeLiveUpdate.show_action_card !== false
+    : true;
+
+  if (!update) {
+    return (
+      <div className="flex h-auto min-h-[560px] flex-col overflow-hidden rounded-[30px] bg-white p-5 shadow-xl ring-1 ring-slate-200 sm:p-6 lg:h-[640px] lg:p-5">
+        <div className="flex items-center justify-between gap-4">
+          <h2 className="text-xl font-bold">Tournament Snapshot</h2>
+          <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
+            {formatTournamentStatus(featuredTournament.status)}
+          </span>
+        </div>
+        <div className="mt-4 grid gap-3">
+          <QuickStat
+            label="Featured Tournament"
+            value={featuredTournament.title || "Premium Cricket Platform"}
+          />
+          <QuickStat
+            label="Tournament Window"
+            value={featuredTournament.timeline || "To be announced"}
+          />
+          <QuickStat label="Venue" value={featuredTournament.venue || "Venue update soon"} />
+          <QuickStat label="Format" value={featuredTournament.format || "Tournament"} />
+        </div>
+        <div className="mt-auto rounded-3xl bg-slate-950 p-4 text-white">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-300">
+            {homepageSettings.hero_launch_note_title ||
+              fallbackHomepageSettings.hero_launch_note_title}
+          </p>
+          <p className="mt-2 text-sm leading-6 text-slate-300">
+            {homepageSettings.hero_launch_note_text ||
+              fallbackHomepageSettings.hero_launch_note_text}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-auto min-h-[560px] flex-col overflow-hidden rounded-[30px] bg-white p-5 shadow-xl ring-1 ring-slate-200 sm:p-6 lg:h-[640px] lg:p-5">
+      <div className="flex shrink-0 items-start justify-between gap-4">
+        <h2 className="min-w-0 text-xl font-bold leading-tight text-slate-950">
+          {title}
+        </h2>
+        <span className="shrink-0 rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
+          Live Update
+        </span>
+      </div>
+
+      <div className="mt-4 flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-3xl border border-slate-200 bg-slate-50">
+        {imageUrl ? (
+          <img
+            src={imageUrl}
+            alt={title || "Live update"}
+            className="h-full w-full object-contain"
+          />
+        ) : (
+          <div className="px-6 text-center text-sm text-slate-500">
+            Upload a flyer/poster from admin.
+          </div>
+        )}
+      </div>
+
+      {showInfo ? (
+        <div className="mt-3 grid shrink-0 gap-2">
+          {activeLiveUpdate?.info_1_value || activeLiveUpdate?.info_1_label ? (
+            <MiniInfo
+              label={activeLiveUpdate?.info_1_label || "Info 1"}
+              value={activeLiveUpdate?.info_1_value || "-"}
+            />
+          ) : null}
+          {activeLiveUpdate?.info_2_value || activeLiveUpdate?.info_2_label ? (
+            <MiniInfo
+              label={activeLiveUpdate?.info_2_label || "Info 2"}
+              value={activeLiveUpdate?.info_2_value || "-"}
+            />
+          ) : null}
+          {activeLiveUpdate?.info_3_value || activeLiveUpdate?.info_3_label ? (
+            <MiniInfo
+              label={activeLiveUpdate?.info_3_label || "Info 3"}
+              value={activeLiveUpdate?.info_3_value || "-"}
+            />
+          ) : null}
+        </div>
+      ) : null}
+
+      {showAction ? (
+        <div className="mt-3 shrink-0 rounded-3xl bg-slate-950 p-4 text-white">
+          <p className="text-lg font-bold leading-tight">{title}</p>
+          <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-300">
+            {subtitle}
+          </p>
+
+          <a
+            href={update?.button_link || "/matches"}
+            className="mt-3 inline-flex h-10 items-center justify-center rounded-2xl bg-emerald-500 px-4 text-xs font-semibold text-slate-950 transition hover:bg-emerald-400"
+          >
+            {update?.button_text || "Open Match Center"}
+          </a>
+        </div>
+      ) : null}
+
+      {liveUpdates.length > 1 ? (
+        <div className="mt-3 flex shrink-0 items-center justify-center gap-2">
+          {liveUpdates.map((_, index) => (
+            <button
+              key={index}
+              type="button"
+              onClick={() => setCurrentIndex(index)}
+              className={`h-2.5 w-2.5 rounded-full transition ${
+                index === currentIndex ? "bg-emerald-500" : "bg-slate-300"
+              }`}
+              aria-label={`Go to update ${index + 1}`}
+            />
+          ))}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
