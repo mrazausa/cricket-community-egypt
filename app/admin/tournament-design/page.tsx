@@ -197,7 +197,14 @@ function parseCsvText(text: string) {
 
   if (lines.length < 2) return [];
 
-  const headers = parseCsvLine(lines[0]).map(normalizeHeader);
+  const headerIndex = lines.findIndex((line) => {
+  const normalized = parseCsvLine(line).map(normalizeHeader);
+  return normalized.includes("playername") && normalized.includes("teamname");
+});
+
+if (headerIndex < 0) return [];
+
+const headers = parseCsvLine(lines[headerIndex]).map(normalizeHeader);
 
   const getValue = (row: string[], possibleHeaders: string[]) => {
     for (const header of possibleHeaders) {
@@ -207,7 +214,7 @@ function parseCsvText(text: string) {
     return "";
   };
 
-  return lines.slice(1).map((line) => {
+  return lines.slice(headerIndex + 1).map((line) => {
     const row = parseCsvLine(line);
 
     return {
@@ -234,6 +241,23 @@ function uniqueTopPlayers(players: CsvPlayerStat[], scoreFn: (player: CsvPlayerS
     .filter((item) => item.score > 0)
     .sort((a, b) => b.score - a.score)
     .slice(0, limit);
+}
+
+function calculateStumpsMvpPoints(player: CsvPlayerStat) {
+  const battingPoints =
+    Math.floor(player.runs / 10) +
+    (player.runs >= 50 ? 1 : 0) +
+    (player.runs >= 100 ? 1 : 0) +
+    (player.runs >= 10 && player.battingSr >= 130 ? 1 : 0);
+
+  const bowlingPoints =
+    player.wickets * 2 +
+    (player.wickets >= 3 ? 1 : 0) +
+    (player.wickets >= 5 ? 1 : 0);
+
+  const fieldingPoints = player.catches + player.stumpings + player.runOuts;
+
+  return battingPoints + bowlingPoints + fieldingPoints;
 }
 
 function buildPerformersFromStats(tournamentId: string, players: CsvPlayerStat[]) {
@@ -263,12 +287,12 @@ function buildPerformersFromStats(tournamentId: string, players: CsvPlayerStat[]
 
   const mvpRows = uniqueTopPlayers(
     players,
-    (p) => p.runs * 0.65 + p.wickets * 22 + p.pomAwards * 28 + (p.catches + p.stumpings + p.runOuts) * 5,
+    calculateStumpsMvpPoints,
     3
   ).map(({ player, score }) => ({
     player,
     score,
-    statLine: `${player.runs} runs, ${player.wickets} wkts, ${player.pomAwards} POM`,
+    statLine: `${player.runs} runs, ${player.wickets} wkts, ${player.catches + player.stumpings + player.runOuts} fielding pts • STUMPS MVP ${score}`,
   }));
 
   const battingRows = uniqueTopPlayers(
@@ -349,6 +373,8 @@ export default function TournamentDesignAdmin() {
   const [importingCsv, setImportingCsv] = useState(false);
   const [csvSummary, setCsvSummary] = useState("");
   const [message, setMessage] = useState("");
+  const [editingPerformer, setEditingPerformer] = useState<ExistingPerformer | null>(null);
+  const [updatingPerformer, setUpdatingPerformer] = useState(false);
 
   useEffect(() => {
     loadTournaments();
@@ -498,6 +524,45 @@ export default function TournamentDesignAdmin() {
     if (selectedId) await loadPerformers(selectedId);
   }
 
+  async function updatePerformer() {
+    if (!editingPerformer) return;
+
+    setUpdatingPerformer(true);
+    setMessage("");
+
+    const payload = {
+      award_category: editingPerformer.award_category || null,
+      player_name: editingPerformer.player_name || "",
+      team_name: editingPerformer.team_name || null,
+      stat_line: editingPerformer.stat_line || null,
+      rating: Number(editingPerformer.rating || 0),
+      rank: Number(editingPerformer.rank || 1),
+      sort_order: Number(editingPerformer.sort_order || 1),
+      is_active: editingPerformer.is_active === true,
+      show_on_tournament_page: editingPerformer.show_on_tournament_page === true,
+    };
+
+    const { error } = await supabase
+      .from("tournament_top_performers")
+      .update(payload)
+      .eq("id", editingPerformer.id);
+
+    if (error) {
+      setMessage(`Update failed: ${error.message}`);
+      setUpdatingPerformer(false);
+      return;
+    }
+
+    setMessage("Top performer row updated successfully.");
+    setEditingPerformer(null);
+    setUpdatingPerformer(false);
+    if (selectedId) await loadPerformers(selectedId);
+  }
+
+  function updateEditingPerformer<K extends keyof ExistingPerformer>(key: K, value: ExistingPerformer[K]) {
+    setEditingPerformer((prev) => (prev ? { ...prev, [key]: value } : prev));
+  }
+
   async function handleSave() {
     if (!selectedId) return;
     setSaving(true);
@@ -513,7 +578,6 @@ export default function TournamentDesignAdmin() {
       venue: form.venue || null,
       format: form.format || null,
       start_date: form.start_date || null,
-      end_date: form.end_date || null,
       is_featured_home: form.is_featured_home === true,
       hero_title_font_mobile: Number(form.hero_title_font_mobile || 32),
       hero_title_font_desktop: Number(form.hero_title_font_desktop || 60),
@@ -696,13 +760,22 @@ export default function TournamentDesignAdmin() {
                           <p className="text-sm text-slate-600">{item.team_name || "Team not set"}</p>
                           <p className="mt-1 text-sm text-slate-500">{item.stat_line || "No stat line"}</p>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => deletePerformer(item.id)}
-                          className="rounded-2xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-bold text-red-700 hover:bg-red-100"
-                        >
-                          Delete
-                        </button>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setEditingPerformer({ ...item })}
+                            className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-bold text-blue-700 hover:bg-blue-100"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => deletePerformer(item.id)}
+                            className="rounded-2xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-bold text-red-700 hover:bg-red-100"
+                          >
+                            Delete
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -781,6 +854,45 @@ export default function TournamentDesignAdmin() {
           </div>
         ) : null}
       </section>
+
+      {editingPerformer ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 px-4 py-6">
+          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-[30px] bg-white p-6 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.22em] text-emerald-700">Edit Top Performer</p>
+                <h3 className="mt-2 text-2xl font-black text-slate-950">Fine Tune Performer Row</h3>
+              </div>
+              <button type="button" onClick={() => setEditingPerformer(null)} className="rounded-full border border-slate-200 px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50">Close</button>
+            </div>
+            <div className="mt-6 grid gap-4 md:grid-cols-2">
+              <label className="block">
+                <span className="text-sm font-semibold text-slate-700">Award Category</span>
+                <select value={editingPerformer.award_category || ""} onChange={(e) => updateEditingPerformer("award_category", e.target.value)} className="mt-2 h-12 w-full rounded-2xl border border-slate-300 bg-white px-4 text-sm font-semibold outline-none focus:border-emerald-500">
+                  {awardCategories.map((category) => (<option key={category} value={category}>{category}</option>))}
+                </select>
+              </label>
+              <Input label="Player Name" value={editingPerformer.player_name || ""} onChange={(v) => updateEditingPerformer("player_name", v)} />
+              <Input label="Team Name" value={editingPerformer.team_name || ""} onChange={(v) => updateEditingPerformer("team_name", v)} />
+              <Input label="Rank" type="number" value={String(editingPerformer.rank || 1)} onChange={(v) => updateEditingPerformer("rank", Number(v))} />
+              <Input label="Rating / MVP Points" type="number" value={String(editingPerformer.rating || 0)} onChange={(v) => updateEditingPerformer("rating", Number(v))} />
+              <Input label="Sort Order" type="number" value={String(editingPerformer.sort_order || 1)} onChange={(v) => updateEditingPerformer("sort_order", Number(v))} />
+            </div>
+            <label className="mt-4 block">
+              <span className="text-sm font-semibold text-slate-700">Stat Line</span>
+              <textarea value={editingPerformer.stat_line || ""} onChange={(e) => updateEditingPerformer("stat_line", e.target.value)} className="mt-2 min-h-24 w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm font-semibold outline-none focus:border-emerald-500" />
+            </label>
+            <div className="mt-5 grid gap-3 md:grid-cols-2">
+              <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm font-bold text-slate-700"><input type="checkbox" checked={editingPerformer.is_active === true} onChange={(e) => updateEditingPerformer("is_active", e.target.checked)} />Active Row</label>
+              <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm font-bold text-slate-700"><input type="checkbox" checked={editingPerformer.show_on_tournament_page === true} onChange={(e) => updateEditingPerformer("show_on_tournament_page", e.target.checked)} />Show on Public Tournament Page</label>
+            </div>
+            <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-end">
+              <button type="button" onClick={() => setEditingPerformer(null)} className="rounded-2xl border border-slate-200 px-5 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
+              <button type="button" onClick={updatePerformer} disabled={updatingPerformer} className="rounded-2xl bg-emerald-700 px-5 py-3 text-sm font-bold text-white hover:bg-emerald-800 disabled:opacity-60">{updatingPerformer ? "Updating..." : "Save Changes"}</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <SiteFooter />
     </main>

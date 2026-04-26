@@ -112,6 +112,21 @@ type PlayerRankingRow = {
   players?: PlayerInfo | PlayerInfo[] | null;
 };
 
+
+type TournamentTopPerformerRow = {
+  id: string;
+  tournament_id: string;
+  player_name: string | null;
+  team_name: string | null;
+  award_category: string | null;
+  stat_line: string | null;
+  rating: number | null;
+  rank: number | null;
+  sort_order: number | null;
+  is_active: boolean | null;
+  show_on_tournament_page: boolean | null;
+};
+
 type TournamentPointsRow = {
   id: string;
   tournament_id: string;
@@ -261,13 +276,13 @@ function buildTournamentAnnouncements({
   nextMatch,
   latestResult,
   latestNews,
-  playerRankings,
+  topPerformers,
   teams,
 }: {
   nextMatch: MatchRow | null;
   latestResult: MatchRow | null;
   latestNews: NewsRow[];
-  playerRankings: PlayerRankingRow[];
+  topPerformers: TournamentTopPerformerRow[];
   teams: TeamInfo[];
 }) {
   const items: { eyebrow: string; title: string; body: string; href?: string }[] = [];
@@ -298,12 +313,11 @@ function buildTournamentAnnouncements({
     });
   }
 
-  playerRankings.slice(0, 3).forEach((row) => {
-    const player = getPlayer(row);
+  topPerformers.slice(0, 3).forEach((row) => {
     items.push({
-      eyebrow: row.category || "Top Performer",
-      title: getPlayerName(player),
-      body: row.stat_value || (row.rating ? `Rating ${row.rating}` : "Tournament performer"),
+      eyebrow: row.award_category || "Top Performer",
+      title: row.player_name || "Tournament Performer",
+      body: row.stat_line || (row.rating ? `Rating ${row.rating}` : row.team_name || "Tournament performer"),
     });
   });
 
@@ -326,6 +340,196 @@ function buildTournamentAnnouncements({
       ];
 }
 
+function normalizeAwardCategory(value: string | null | undefined) {
+  return (value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function performerCategoryKey(row: TournamentTopPerformerRow) {
+  const label = normalizeAwardCategory(row.award_category);
+
+  if (label.includes("batsman") || label.includes("batting") || label.includes("run")) {
+    return "batsman";
+  }
+
+  if (label.includes("bowler") || label.includes("bowling") || label.includes("wicket")) {
+    return "bowler";
+  }
+
+  if (label.includes("mvp") || label.includes("best player") || label.includes("all round") || label.includes("allround")) {
+    return "mvp";
+  }
+
+  return "other";
+}
+
+function sortPerformers(a: TournamentTopPerformerRow, b: TournamentTopPerformerRow) {
+  const ar = a.rank ?? 999;
+  const br = b.rank ?? 999;
+  if (ar !== br) return ar - br;
+
+  const as = a.sort_order ?? 999;
+  const bs = b.sort_order ?? 999;
+  if (as !== bs) return as - bs;
+
+  return (b.rating ?? 0) - (a.rating ?? 0);
+}
+
+function getPerformerGroups(rows: TournamentTopPerformerRow[]) {
+  const mvp: TournamentTopPerformerRow[] = [];
+  const batsman: TournamentTopPerformerRow[] = [];
+  const bowler: TournamentTopPerformerRow[] = [];
+
+  rows.forEach((row) => {
+    const key = performerCategoryKey(row);
+    if (key === "batsman") batsman.push(row);
+    else if (key === "bowler") bowler.push(row);
+    else if (key === "mvp") mvp.push(row);
+  });
+
+  return [
+    {
+      key: "mvp",
+      eyebrow: "Best Player / MVP",
+      title: "MVP Race",
+      description: "Overall tournament impact from batting, bowling and fielding contribution.",
+      rows: mvp.sort(sortPerformers).slice(0, 3),
+    },
+    {
+      key: "batsman",
+      eyebrow: "Best Batsman",
+      title: "Batting Leaders",
+      description: "Top batting performances based on runs, average and strike rate.",
+      rows: batsman.sort(sortPerformers).slice(0, 3),
+    },
+    {
+      key: "bowler",
+      eyebrow: "Best Bowler",
+      title: "Bowling Leaders",
+      description: "Top bowling performances based on wickets and bowling impact.",
+      rows: bowler.sort(sortPerformers).slice(0, 3),
+    },
+  ];
+}
+
+function PerformerPodium({
+  group,
+}: {
+  group: ReturnType<typeof getPerformerGroups>[number];
+}) {
+  const leader = group.rows[0] || null;
+  const race = group.rows.slice(1, 3);
+
+  return (
+    <div className="rounded-[28px] border border-slate-200 bg-slate-50 p-4 sm:p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.22em] text-emerald-700">
+            {group.eyebrow}
+          </p>
+          <h3 className="mt-1 text-2xl font-black text-slate-950">{group.title}</h3>
+          <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-600">
+            {group.description}
+          </p>
+        </div>
+        <span className="rounded-full bg-white px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] text-slate-600 ring-1 ring-slate-200">
+          Top 3
+        </span>
+      </div>
+
+      {leader ? (
+        <div className="mt-5 grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+          <div className="relative overflow-hidden rounded-[26px] bg-gradient-to-br from-slate-950 via-[#08183f] to-emerald-800 p-5 text-white shadow-xl">
+            <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-emerald-300/20 blur-2xl" />
+            <div className="relative">
+              <div className="flex items-center justify-between gap-3">
+                <span className="rounded-full bg-amber-300 px-4 py-1.5 text-xs font-black uppercase tracking-[0.18em] text-slate-950">
+                  Rank 1 Leader
+                </span>
+                <span className="text-4xl font-black text-white/20">#1</span>
+              </div>
+
+              <h4 className="mt-5 text-3xl font-black leading-tight">
+                {leader.player_name || "Tournament Performer"}
+              </h4>
+              <p className="mt-1 text-sm font-bold uppercase tracking-[0.12em] text-emerald-100">
+                {leader.team_name || "Team not set"}
+              </p>
+
+              <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                <div className="rounded-2xl bg-white/10 p-4 ring-1 ring-white/10">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-100">
+                    Rating / MVP
+                  </p>
+                  <p className="mt-2 text-2xl font-black">{leader.rating ?? "-"}</p>
+                </div>
+                <div className="rounded-2xl bg-white/10 p-4 ring-1 ring-white/10">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-100">
+                    Stat
+                  </p>
+                  <p className="mt-2 text-base font-bold leading-6">{leader.stat_line || "-"}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-3">
+            <p className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">
+              In the race
+            </p>
+            {race.length > 0 ? (
+              race.map((row, index) => (
+                <PerformerRaceCard key={row.id} row={row} fallbackRank={index + 2} />
+              ))
+            ) : (
+              <EmptyCard text="Rank 2 and Rank 3 will appear here once updated." />
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="mt-5">
+          <EmptyCard text={group.eyebrow + " will appear here once imported or enabled from admin."} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PerformerRaceCard({
+  row,
+  fallbackRank,
+}: {
+  row: TournamentTopPerformerRow;
+  fallbackRank: number;
+}) {
+  return (
+    <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">
+            Rank {row.rank ?? fallbackRank}
+          </p>
+          <h4 className="mt-2 truncate text-xl font-black text-slate-950">
+            {row.player_name || "Tournament Performer"}
+          </h4>
+          <p className="mt-1 text-xs font-bold uppercase tracking-[0.1em] text-slate-500">
+            {row.team_name || "Team not set"}
+          </p>
+        </div>
+        <div className="shrink-0 rounded-2xl bg-slate-50 px-3 py-2 text-right ring-1 ring-slate-200">
+          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Rating</p>
+          <p className="text-base font-black text-slate-950">{row.rating ?? "-"}</p>
+        </div>
+      </div>
+      <p className="mt-3 rounded-2xl bg-slate-50 px-3 py-2 text-sm font-bold leading-6 text-slate-800 ring-1 ring-slate-100">
+        {row.stat_line || "Stats not set"}
+      </p>
+    </div>
+  );
+}
+
 export default function PublicTournamentPage() {
   const searchParams = useSearchParams();
   const params = useParams<{ slug: string }>();
@@ -344,7 +548,7 @@ export default function PublicTournamentPage() {
   const [loadingLiveBlocks, setLoadingLiveBlocks] = useState(true);
 
   const [teamRankings, setTeamRankings] = useState<TeamRankingRow[]>([]);
-  const [playerRankings, setPlayerRankings] = useState<PlayerRankingRow[]>([]);
+  const [topPerformers, setTopPerformers] = useState<TournamentTopPerformerRow[]>([]);
   const [tournamentPoints, setTournamentPoints] = useState<TournamentPointsRow[]>([]);
   const [loadingRankings, setLoadingRankings] = useState(true);
   const [loadingPointsTable, setLoadingPointsTable] = useState(true);
@@ -360,7 +564,7 @@ export default function PublicTournamentPage() {
     if (!tournament?.id) return;
     loadTournamentTeams(tournament.id);
     loadLiveBlocks(tournament.id);
-    loadRankings();
+    loadRankings(tournament.id);
     loadTournamentPointsTable(tournament.id);
   }, [tournament?.id]);
 
@@ -518,10 +722,10 @@ export default function PublicTournamentPage() {
     setLoadingPointsTable(false);
   }
 
-  async function loadRankings() {
+  async function loadRankings(tournamentId: string) {
     setLoadingRankings(true);
 
-    const [teamRankingsRes, playerRankingsRes] = await Promise.all([
+    const [teamRankingsRes, topPerformersRes] = await Promise.all([
       supabase
         .from("team_rankings")
         .select(
@@ -548,25 +752,25 @@ export default function PublicTournamentPage() {
         .limit(6),
 
       supabase
-        .from("player_rankings")
-        .select(
-          `
-          id,
-          player_id,
-          rank_position,
-          category,
-          rating,
-          stat_value,
-          season_label,
-          players (*)
-        `
-        )
-        .order("rank_position", { ascending: true })
-        .limit(6),
+        .from("tournament_top_performers")
+        .select("*")
+        .eq("tournament_id", tournamentId)
+        .eq("is_active", true)
+        .eq("show_on_tournament_page", true)
+        .order("sort_order", { ascending: true })
+        .order("rank", { ascending: true })
+        .limit(12),
     ]);
 
     setTeamRankings((teamRankingsRes.data || []) as TeamRankingRow[]);
-    setPlayerRankings((playerRankingsRes.data || []) as PlayerRankingRow[]);
+
+    if (topPerformersRes.error) {
+      console.error(topPerformersRes.error);
+      setTopPerformers([]);
+    } else {
+      setTopPerformers((topPerformersRes.data || []) as TournamentTopPerformerRow[]);
+    }
+
     setLoadingRankings(false);
   }
 
@@ -622,7 +826,7 @@ export default function PublicTournamentPage() {
     nextMatch,
     latestResult,
     latestNews,
-    playerRankings,
+    topPerformers,
     teams: tournamentTeams,
   });
 
@@ -910,40 +1114,26 @@ export default function PublicTournamentPage() {
           <SectionHeader
             eyebrow="Leaders"
             title="Top Performers"
-            description="Tournament leaders and award race preview. This can be controlled from Admin → Player Rankings."
+            description="Tournament leaders and award race preview. Rank 1 is highlighted, while Rank 2 and Rank 3 remain in the race. Controlled from Admin → Tournament Design."
           />
 
-          <div className="mt-5 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <div className="mt-6 space-y-5">
             {loadingRankings ? (
-              [1, 2, 3].map((item) => <EmptyCard key={item} text="Loading performers..." />)
-            ) : playerRankings.length > 0 ? (
-              playerRankings.slice(0, 6).map((row) => {
-                const player = getPlayer(row);
-                return (
-                  <div key={row.id} className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
-                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">
-                      {row.category || "Top Performer"}
-                    </p>
-                    <h3 className="mt-3 text-xl font-extrabold text-slate-950">
-                      {getPlayerName(player)}
-                    </h3>
-                    <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                      <div className="rounded-2xl bg-white p-3 ring-1 ring-slate-200">
-                        <p className="text-xs uppercase tracking-[0.14em] text-slate-500">Rating</p>
-                        <p className="mt-1 font-bold text-slate-900">{row.rating ?? "-"}</p>
-                      </div>
-                      <div className="rounded-2xl bg-white p-3 ring-1 ring-slate-200">
-                        <p className="text-xs uppercase tracking-[0.14em] text-slate-500">Stat</p>
-                        <p className="mt-1 font-bold text-slate-900">{row.stat_value || "-"}</p>
-                      </div>
-                    </div>
+              ["MVP Race", "Batting Leaders", "Bowling Leaders"].map((item) => (
+                <div key={item} className="rounded-[28px] border border-slate-200 bg-slate-50 p-5">
+                  <p className="text-xs font-bold uppercase tracking-[0.22em] text-emerald-700">{item}</p>
+                  <div className="mt-5 grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+                    <EmptyCard text="Loading leader..." />
+                    <EmptyCard text="Loading race positions..." />
                   </div>
-                );
-              })
+                </div>
+              ))
+            ) : topPerformers.length > 0 ? (
+              getPerformerGroups(topPerformers).map((group) => (
+                <PerformerPodium key={group.key} group={group} />
+              ))
             ) : (
-              <div className="md:col-span-2 lg:col-span-3">
-                <EmptyCard text="Top performers will appear here once player rankings are added." />
-              </div>
+              <EmptyCard text="Top performers will appear here once player rankings are added." />
             )}
           </div>
         </div>
