@@ -110,7 +110,7 @@ function toDatetimeLocalValue(value: string | null | undefined) {
   if (Number.isNaN(d.getTime())) return "";
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(
-    d.getHours(),
+    d.getHours()
   )}:${pad(d.getMinutes())}`;
 }
 
@@ -132,13 +132,13 @@ function normalizeName(value: string | null | undefined) {
 
 function findBestTournamentIdByTitle(
   tournamentTitle: string | undefined,
-  tournaments: TournamentRow[],
+  tournaments: TournamentRow[]
 ) {
   if (!tournamentTitle) return "";
   const normalizedTarget = normalizeName(tournamentTitle);
 
   const exact = tournaments.find(
-    (item) => normalizeName(item.title) === normalizedTarget,
+    (item) => normalizeName(item.title) === normalizedTarget
   );
   if (exact) return exact.id;
 
@@ -154,9 +154,7 @@ function findBestTeamIdByName(teamName: string | undefined, teams: TeamRow[]) {
   if (!teamName) return "";
   const normalizedTarget = normalizeName(teamName);
 
-  const exact = teams.find(
-    (item) => normalizeName(item.name) === normalizedTarget,
-  );
+  const exact = teams.find((item) => normalizeName(item.name) === normalizedTarget);
   if (exact) return exact.id;
 
   const contains = teams.find((item) => {
@@ -169,120 +167,12 @@ function findBestTeamIdByName(teamName: string | undefined, teams: TeamRow[]) {
     const name = normalizeName(item.name);
     const targetWords = normalizedTarget.split(" ").filter(Boolean);
     const matchedWords = targetWords.filter(
-      (word) => word.length > 2 && name.includes(word),
+      (word) => word.length > 2 && name.includes(word)
     );
     return matchedWords.length >= Math.min(2, targetWords.length);
   });
 
   return tokenMatch?.id || "";
-}
-
-function toTitleCaseName(value: string | null | undefined) {
-  return (value || "")
-    .toLowerCase()
-    .split(" ")
-    .filter(Boolean)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" ");
-}
-
-function cleanStumpsMatchTitle(value: string | null | undefined) {
-  return (value || "")
-    .replace(/^s\s+/i, "")
-    .replace(
-      /app\s*store\s*match\s*report\s*created\s*from\s*stumps\s*match\s*report/gi,
-      "",
-    )
-    .replace(/stumps\s*match\s*report/gi, "")
-    .replace(/match\s*report/gi, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function buildCleanMatchTitle(
-  teamAName?: string,
-  teamBName?: string,
-  fallbackTitle?: string | null,
-) {
-  const a = toTitleCaseName(teamAName);
-  const b = toTitleCaseName(teamBName);
-  if (a && b) return `${a} vs ${b}`;
-
-  const cleaned = cleanStumpsMatchTitle(fallbackTitle);
-  if (cleaned) {
-    const parts = cleaned.split(/\s+vs\s+/i);
-    if (parts.length >= 2) {
-      return `${toTitleCaseName(parts[0])} vs ${toTitleCaseName(parts.slice(1).join(" vs "))}`;
-    }
-    return cleaned;
-  }
-
-  return "";
-}
-
-function extractKeyPlayersFromStumpsText(
-  clean: string,
-  playerOfMatch?: string,
-) {
-  const snippets: string[] = [];
-
-  if (playerOfMatch) {
-    snippets.push(playerOfMatch.trim());
-  }
-
-  const battingMatches = [
-    ...clean.matchAll(
-      /([A-Za-z][A-Za-z\s'.-]{2,35})\s+(\d{2,3})\*?\s*\(\s*(\d{1,3})\s*\)/g,
-    ),
-  ];
-
-  battingMatches.forEach((match) => {
-    const name = match[1].trim().replace(/\s+/g, " ");
-    const runs = match[2];
-    const balls = match[3];
-    const text = `${name} ${runs}(${balls})`;
-    if (
-      !snippets.some((item) =>
-        normalizeName(item).includes(normalizeName(name)),
-      )
-    ) {
-      snippets.push(text);
-    }
-  });
-
-  const bowlingMatches = [
-    ...clean.matchAll(/([A-Za-z][A-Za-z\s'.-]{2,35})\s+(\d{1,2})-(\d{1,3})/g),
-  ];
-
-  bowlingMatches.forEach((match) => {
-    const name = match[1].trim().replace(/\s+/g, " ");
-    const wickets = match[2];
-    const runs = match[3];
-    const text = `${name} ${wickets}-${runs}`;
-    if (
-      !snippets.some((item) =>
-        normalizeName(item).includes(normalizeName(name)),
-      )
-    ) {
-      snippets.push(text);
-    }
-  });
-
-  return snippets.slice(0, 5).join(", ");
-}
-
-function getRowDisplayTitle(row: MatchRow, teamMap: Map<string, TeamRow>) {
-  const teamA = row.team_a_id ? teamMap.get(row.team_a_id) : null;
-  const teamB = row.team_b_id ? teamMap.get(row.team_b_id) : null;
-
-  const cleanTeamTitle = buildCleanMatchTitle(
-    teamA?.name || "",
-    teamB?.name || "",
-    "",
-  );
-  if (cleanTeamTitle) return cleanTeamTitle;
-
-  return cleanStumpsMatchTitle(row.title) || row.title || "Untitled Match";
 }
 
 function extractStumpsSummary(text: string): ParsedStumpsData {
@@ -294,28 +184,33 @@ function extractStumpsSummary(text: string): ParsedStumpsData {
   const dateTimeMatch = clean.match(/Date\s*&\s*Time\s+(.+?)\s+Toss\s+/i);
   const resultMatch = clean.match(/Result\s+(.+?)\s+Player Of The Match\s+/i);
   const pomMatch = clean.match(
-    /Player Of The Match\s+(.+?)\s+Match Information\s+/i,
+    /Player Of The Match\s+(.+?)\s+Match Information\s+/i
   );
 
   const inningsMatches = [
-    ...clean.matchAll(
-      /([A-Z][A-Z\s&.-]+?)\s+(\d+-\d+)\s+in\s+([\d.]+)\s+overs/gi,
-    ),
+    ...clean.matchAll(/([A-Z][A-Z\s&.-]+?)\s+(\d+-\d+)\s+in\s+([\d.]+)\s+overs/gi),
   ];
   const teamAName = inningsMatches[0]?.[1]?.trim() || "";
   const teamBName = inningsMatches[1]?.[1]?.trim() || "";
 
-  const autoMatchTitle = buildCleanMatchTitle(
-    teamAName,
-    teamBName,
-    matchTitleMatch?.[1]?.trim() || "",
-  );
+  const autoMatchTitle =
+    teamAName && teamBName
+      ? `${teamAName} vs ${teamBName}`
+      : matchTitleMatch?.[1]?.trim() || "";
 
-  const detectedPlayerOfMatch = pomMatch?.[1]?.trim() || undefined;
-  const keyPlayers = extractKeyPlayersFromStumpsText(
-    clean,
-    detectedPlayerOfMatch,
-  );
+  const summaryMatch = clean.match(/Match Summary\s+(.+?)\s+1st Innings Scorecard/i);
+  let keyPlayers = "";
+
+  if (summaryMatch?.[1]) {
+    const summaryText = summaryMatch[1].trim();
+    const playerSnippets = [
+      ...summaryText.matchAll(
+        /[A-Za-z][A-Za-z\s'.-]*\s+\d+\*?\(\d+\)|[A-Za-z][A-Za-z\s'.-]*\s+\d+-\d+/g
+      ),
+    ].map((m) => m[0].trim());
+
+    keyPlayers = playerSnippets.slice(0, 4).join(", ");
+  }
 
   let matchDatetimeLocal = "";
   if (dateTimeMatch?.[1]) {
@@ -330,7 +225,7 @@ function extractStumpsSummary(text: string): ParsedStumpsData {
     teamAName: teamAName || undefined,
     teamBName: teamBName || undefined,
     resultSummary: resultMatch?.[1]?.trim() || undefined,
-    playerOfMatch: detectedPlayerOfMatch,
+    playerOfMatch: pomMatch?.[1]?.trim() || undefined,
     tournamentTitle: tournamentMatch?.[1]?.trim() || undefined,
     matchTitle: autoMatchTitle || undefined,
     venue: venueMatch?.[1]?.trim() || undefined,
@@ -393,10 +288,7 @@ export default function AdminMatchesPage() {
         .from("tournaments")
         .select("id, title, slug, status")
         .order("created_at", { ascending: false }),
-      supabase
-        .from("teams")
-        .select("id, name, slug")
-        .order("name", { ascending: true }),
+      supabase.from("teams").select("id, name, slug").order("name", { ascending: true }),
     ]);
 
     if (tournamentsRes.error || teamsRes.error) {
@@ -481,9 +373,7 @@ export default function AdminMatchesPage() {
 
       if (uploadError) throw uploadError;
 
-      const { data } = supabase.storage
-        .from(MEDIA_BUCKET)
-        .getPublicUrl(filePath);
+      const { data } = supabase.storage.from(MEDIA_BUCKET).getPublicUrl(filePath);
 
       const pdfText = await extractTextFromPdfFirstPage(file);
       const parsed = extractStumpsSummary(pdfText);
@@ -497,26 +387,12 @@ export default function AdminMatchesPage() {
 
       setSelectedTournamentId(detectedTournamentId || selectedTournamentId);
 
-      const teamANameFromDb = detectedTeamAId
-        ? teams.find((team) => team.id === detectedTeamAId)?.name ||
-          parsed.teamAName
-        : parsed.teamAName;
-      const teamBNameFromDb = detectedTeamBId
-        ? teams.find((team) => team.id === detectedTeamBId)?.name ||
-          parsed.teamBName
-        : parsed.teamBName;
-      const cleanMatchTitle = buildCleanMatchTitle(
-        teamANameFromDb,
-        teamBNameFromDb,
-        parsed.matchTitle || form.title,
-      );
-
       setForm((prev) => ({
         ...prev,
         tournament_id: detectedTournamentId || prev.tournament_id,
         team_a_id: detectedTeamAId || prev.team_a_id,
         team_b_id: detectedTeamBId || prev.team_b_id,
-        title: cleanMatchTitle || prev.title,
+        title: parsed.matchTitle || prev.title,
         match_datetime: parsed.matchDatetimeLocal || prev.match_datetime,
         venue: parsed.venue || prev.venue,
         status: parsed.status || "completed",
@@ -527,7 +403,7 @@ export default function AdminMatchesPage() {
       }));
 
       setMessage(
-        "Scorecard uploaded. Match details were auto-filled from the STUMPS summary page.",
+        "Scorecard uploaded. Match details were auto-filled from the STUMPS summary page."
       );
       setMessageType("success");
     } catch (error) {
@@ -680,8 +556,8 @@ export default function AdminMatchesPage() {
             Create upcoming fixtures and completed match results.
           </h1>
           <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-200 sm:text-base">
-            Upcoming matches are simple title-based entries. Completed matches
-            should use the STUMPS scorecard PDF upload for structured auto-fill.
+            Upcoming matches are simple title-based entries. Completed matches should use
+            the STUMPS scorecard PDF upload for structured auto-fill.
           </p>
         </div>
       </section>
@@ -697,9 +573,8 @@ export default function AdminMatchesPage() {
                 {editingId ? "Edit Match" : "Create Match"}
               </h2>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-                For completed matches, upload the scorecard PDF and let the
-                system fill the summary. For upcoming matches, just type the
-                match title manually.
+                For completed matches, upload the scorecard PDF and let the system fill
+                the summary. For upcoming matches, just type the match title manually.
               </p>
             </div>
 
@@ -745,12 +620,10 @@ export default function AdminMatchesPage() {
             />
 
             <Field
-              label="Match Header"
+              label="Match Title"
               value={form.title}
-              onChange={(value) =>
-                setForm((prev) => ({ ...prev, title: value }))
-              }
-              placeholder="Plaza Spartan vs SGH Lions"
+              onChange={(value) => setForm((prev) => ({ ...prev, title: value }))}
+              placeholder="India Blue vs Mufaddal XI"
             />
 
             <Field
@@ -765,18 +638,14 @@ export default function AdminMatchesPage() {
             <Field
               label="Venue"
               value={form.venue}
-              onChange={(value) =>
-                setForm((prev) => ({ ...prev, venue: value }))
-              }
+              onChange={(value) => setForm((prev) => ({ ...prev, venue: value }))}
               placeholder="Al-Azhar"
             />
 
             <FieldSelect
               label="Status"
               value={form.status}
-              onChange={(value) =>
-                setForm((prev) => ({ ...prev, status: value }))
-              }
+              onChange={(value) => setForm((prev) => ({ ...prev, status: value }))}
               options={[
                 { value: "upcoming", label: "Upcoming" },
                 { value: "live", label: "Live" },
@@ -788,9 +657,7 @@ export default function AdminMatchesPage() {
               label="Sort Order"
               type="number"
               value={form.sort_order}
-              onChange={(value) =>
-                setForm((prev) => ({ ...prev, sort_order: value }))
-              }
+              onChange={(value) => setForm((prev) => ({ ...prev, sort_order: value }))}
               placeholder="0"
             />
 
@@ -798,9 +665,8 @@ export default function AdminMatchesPage() {
               <>
                 <div className="md:col-span-2">
                   <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-                    Upload the STUMPS match report PDF. The form will auto-fill
-                    the teams, match title, result summary, player of the match,
-                    venue, and key players.
+                    Upload the STUMPS match report PDF. The form will auto-fill the teams,
+                    match title, result summary, player of the match, venue, and key players.
                   </div>
                 </div>
 
@@ -825,10 +691,10 @@ export default function AdminMatchesPage() {
                     {uploadingScorecard
                       ? "Uploading PDF..."
                       : parsingScorecard
-                        ? "Reading STUMPS summary page..."
-                        : form.scorecard_pdf_url
-                          ? "PDF uploaded and linked"
-                          : "Upload full scorecard PDF"}
+                      ? "Reading STUMPS summary page..."
+                      : form.scorecard_pdf_url
+                      ? "PDF uploaded and linked"
+                      : "Upload full scorecard PDF"}
                   </p>
 
                   {form.scorecard_pdf_url ? (
@@ -845,10 +711,7 @@ export default function AdminMatchesPage() {
                       <button
                         type="button"
                         onClick={() =>
-                          setForm((prev) => ({
-                            ...prev,
-                            scorecard_pdf_url: "",
-                          }))
+                          setForm((prev) => ({ ...prev, scorecard_pdf_url: "" }))
                         }
                         className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-100"
                       >
@@ -919,9 +782,7 @@ export default function AdminMatchesPage() {
           <button
             type="button"
             onClick={() => void handleSave()}
-            disabled={
-              saving || loadingSetup || uploadingScorecard || parsingScorecard
-            }
+            disabled={saving || loadingSetup || uploadingScorecard || parsingScorecard}
             className="mt-6 inline-flex h-12 items-center justify-center rounded-2xl bg-emerald-600 px-5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {saving ? "Saving..." : editingId ? "Update Match" : "Create Match"}
@@ -994,29 +855,24 @@ export default function AdminMatchesPage() {
                         </div>
 
                         <h3 className="text-xl font-bold text-slate-900">
-                          {getRowDisplayTitle(row, teamMap)}
+                          {row.title ||
+                            `${teamA?.name || "Team A"} vs ${teamB?.name || "Team B"}`}
                         </h3>
 
                         <p className="text-sm text-slate-600">
-                          <span className="font-semibold text-slate-900">
-                            Date:
-                          </span>{" "}
+                          <span className="font-semibold text-slate-900">Date:</span>{" "}
                           {formatMatchDate(row.match_datetime)}
                         </p>
 
                         <p className="text-sm text-slate-600">
-                          <span className="font-semibold text-slate-900">
-                            Venue:
-                          </span>{" "}
+                          <span className="font-semibold text-slate-900">Venue:</span>{" "}
                           {row.venue || "Not set"}
                         </p>
 
                         {row.status === "completed" ? (
                           <>
                             <p className="text-sm text-slate-600">
-                              <span className="font-semibold text-slate-900">
-                                Result:
-                              </span>{" "}
+                              <span className="font-semibold text-slate-900">Result:</span>{" "}
                               {row.result_summary || "Not updated"}
                             </p>
 
@@ -1028,9 +884,7 @@ export default function AdminMatchesPage() {
                             </p>
 
                             <p className="text-sm text-slate-600">
-                              <span className="font-semibold text-slate-900">
-                                Key Players:
-                              </span>{" "}
+                              <span className="font-semibold text-slate-900">Key Players:</span>{" "}
                               {row.key_players || "Not updated"}
                             </p>
                           </>
@@ -1108,9 +962,7 @@ function Field({
 }) {
   return (
     <div>
-      <label className="mb-2 block text-sm font-medium text-slate-700">
-        {label}
-      </label>
+      <label className="mb-2 block text-sm font-medium text-slate-700">{label}</label>
       <input
         type={type}
         value={value}
@@ -1137,9 +989,7 @@ function FieldTextarea({
 }) {
   return (
     <div>
-      <label className="mb-2 block text-sm font-medium text-slate-700">
-        {label}
-      </label>
+      <label className="mb-2 block text-sm font-medium text-slate-700">{label}</label>
       <textarea
         value={value}
         placeholder={placeholder}
@@ -1164,9 +1014,7 @@ function FieldSelect({
 }) {
   return (
     <div>
-      <label className="mb-2 block text-sm font-medium text-slate-700">
-        {label}
-      </label>
+      <label className="mb-2 block text-sm font-medium text-slate-700">{label}</label>
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}

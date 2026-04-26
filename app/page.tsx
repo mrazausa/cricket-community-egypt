@@ -978,6 +978,7 @@ export default function HomePage() {
                         matches={upcomingMatches}
                         teams={tournamentTeams}
                         type="upcoming"
+                        tournamentSlug={featuredTournament?.slug || ""}
                       />
 
                       <MatchCarousel
@@ -988,6 +989,7 @@ export default function HomePage() {
                         matches={completedMatches}
                         teams={tournamentTeams}
                         type="completed"
+                        tournamentSlug={featuredTournament?.slug || ""}
                       />
                     </>
                   )}
@@ -1021,7 +1023,7 @@ export default function HomePage() {
   <a
     href={
       featuredTournament?.slug
-        ? `/tournaments/${featuredTournament.slug}#matches`
+        ? `/tournaments/${featuredTournament.slug}#schedule`
         : "/tournaments"
     }
     className="rounded-2xl bg-white px-4 py-4 ring-1 ring-slate-200 transition hover:-translate-y-[1px] hover:bg-slate-50 hover:shadow-md"
@@ -1791,6 +1793,7 @@ function MatchCarousel({
   matches,
   teams,
   type,
+  tournamentSlug,
 }: {
   title: string;
   badge: string;
@@ -1799,6 +1802,7 @@ function MatchCarousel({
   matches: MatchRow[];
   teams: TeamInfo[];
   type: "upcoming" | "completed";
+  tournamentSlug: string;
 }) {
   const scrollerRef = useRef<HTMLDivElement | null>(null);
 
@@ -1835,7 +1839,7 @@ function MatchCarousel({
       {matches.length > 0 ? (
         <div ref={scrollerRef} className="flex snap-x gap-3 overflow-x-auto pb-2">
           {matches.map((match) => (
-            <MatchMiniCard key={match.id} match={match} teams={teams} type={type} />
+            <MatchMiniCard key={match.id} match={match} teams={teams} type={type} tournamentSlug={tournamentSlug} />
           ))}
         </div>
       ) : (
@@ -1849,15 +1853,18 @@ function MatchMiniCard({
   match,
   teams,
   type,
+  tournamentSlug,
 }: {
   match: MatchRow;
   teams: TeamInfo[];
   type: "upcoming" | "completed";
+  tournamentSlug: string;
 }) {
   const primaryLink = getMatchPrimaryLink(match);
+  const scheduleLink = tournamentSlug ? `/tournaments/${tournamentSlug}#schedule` : "/tournaments";
 
   return (
-    <div className="min-w-[260px] snap-start rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:min-w-[300px]">
+    <a href={scheduleLink} className="block min-w-[260px] snap-start rounded-2xl border border-slate-200 bg-slate-50 p-4 transition hover:-translate-y-[1px] hover:border-emerald-300 hover:bg-white hover:shadow-md sm:min-w-[300px]">
       <p className="text-sm font-semibold text-slate-900">
         {buildHomepageMatchTitle(match, teams)}
       </p>
@@ -1882,17 +1889,17 @@ function MatchMiniCard({
         </>
       )}
 
-      {primaryLink ? (
-        <a
-          href={primaryLink}
-          target="_blank"
-          rel="noreferrer"
-          className="mt-3 inline-flex h-9 items-center justify-center rounded-xl bg-slate-900 px-3 text-xs font-semibold text-white transition hover:bg-slate-800"
-        >
-          {type === "completed" ? "View Scorecard" : "Open Match"}
-        </a>
-      ) : null}
-    </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <span className="inline-flex h-9 items-center justify-center rounded-xl bg-slate-900 px-3 text-xs font-semibold text-white">
+          Open Schedule
+        </span>
+        {type === "completed" && primaryLink ? (
+          <span className="inline-flex h-9 items-center justify-center rounded-xl border border-slate-300 px-3 text-xs font-semibold text-slate-700">
+            Scorecard Available
+          </span>
+        ) : null}
+      </div>
+    </a>
   );
 }
 
