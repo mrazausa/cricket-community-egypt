@@ -1463,6 +1463,9 @@ function getYoutubeEmbedUrl(url: string, autoplay: boolean) {
       if (!videoId && parsed.pathname.includes("/shorts/")) {
         videoId = parsed.pathname.split("/shorts/")[1]?.split("/")[0] || "";
       }
+	  if (!videoId && parsed.pathname.includes("/live/")) {
+  videoId = parsed.pathname.split("/live/")[1]?.split("/")[0] || "";
+}
     }
   } catch {
     videoId = trimmed;
