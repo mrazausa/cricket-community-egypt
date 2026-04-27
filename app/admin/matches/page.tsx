@@ -36,6 +36,7 @@ type MatchRow = {
   scorecard_pdf_url: string | null;
   external_score_url: string | null;
   is_featured_home: boolean | null;
+  match_number: number | null;
   sort_order: number | null;
   created_at?: string | null;
   updated_at?: string | null;
@@ -55,6 +56,7 @@ type MatchForm = {
   scorecard_pdf_url: string;
   external_score_url: string;
   is_featured_home: boolean;
+  match_number: string;
   sort_order: string;
 };
 
@@ -85,6 +87,7 @@ const emptyForm: MatchForm = {
   scorecard_pdf_url: "",
   external_score_url: "",
   is_featured_home: false,
+  match_number: "",
   sort_order: "0",
 };
 
@@ -430,6 +433,7 @@ export default function AdminMatchesPage() {
     let query = supabase
       .from("matches")
       .select("*")
+      .order("match_number", { ascending: true, nullsFirst: false })
       .order("sort_order", { ascending: true })
       .order("match_datetime", { ascending: true });
 
@@ -578,6 +582,7 @@ export default function AdminMatchesPage() {
       scorecard_pdf_url: form.scorecard_pdf_url.trim() || null,
       external_score_url: form.external_score_url.trim() || null,
       is_featured_home: !!form.is_featured_home,
+      match_number: form.match_number === "" ? null : Number(form.match_number) || null,
       sort_order: form.sort_order === "" ? 0 : Number(form.sort_order) || 0,
       updated_at: new Date().toISOString(),
     };
@@ -628,6 +633,7 @@ export default function AdminMatchesPage() {
       scorecard_pdf_url: row.scorecard_pdf_url || "",
       external_score_url: row.external_score_url || "",
       is_featured_home: !!row.is_featured_home,
+      match_number: row.match_number?.toString() ?? "",
       sort_order: row.sort_order?.toString() ?? "0",
     });
     setSelectedTournamentId(row.tournament_id || "");
@@ -785,7 +791,17 @@ export default function AdminMatchesPage() {
             />
 
             <Field
-              label="Sort Order"
+              label="Match No."
+              type="number"
+              value={form.match_number}
+              onChange={(value) =>
+                setForm((prev) => ({ ...prev, match_number: value }))
+              }
+              placeholder="1"
+            />
+
+            <Field
+              label="Sort Order (optional internal order)"
               type="number"
               value={form.sort_order}
               onChange={(value) =>
@@ -983,6 +999,9 @@ export default function AdminMatchesPage() {
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                       <div className="space-y-2">
                         <div className="flex flex-wrap items-center gap-2">
+                          <span className="rounded-full bg-slate-950 px-3 py-1 text-xs font-bold text-white shadow-sm">
+                            {row.match_number ? `Match ${row.match_number}` : "Match No. not set"}
+                          </span>
                           <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
                             {(row.status || "upcoming").toUpperCase()}
                           </span>
