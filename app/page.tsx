@@ -118,9 +118,18 @@ type PlayerRankingRow = {
   player_id: string | null;
   rank_position: number | null;
   category: string | null;
+  award_category?: string | null;
   rating: number | null;
+  player_display_name?: string | null;
   player_name_override?: string | null;
+  team_display_name?: string | null;
+  player_image_url?: string | null;
   player_photo_override_url?: string | null;
+  season_label?: string | null;
+  period_label?: string | null;
+  stat_value?: string | null;
+  sort_order?: number | null;
+  show_on_homepage?: boolean | null;
   players?: PlayerInfo | PlayerInfo[] | null;
 };
 
@@ -165,7 +174,6 @@ type MatchRow = {
   scorecard_pdf_url: string | null;
   external_score_url: string | null;
   is_featured_home: boolean | null;
-  match_number: number | null;
   sort_order: number | null;
 };
 
@@ -572,7 +580,6 @@ export default function HomePage() {
         .eq("tournament_id", tournamentId)
         .eq("status", "upcoming")
         .eq("is_featured_home", true)
-        .order("match_number", { ascending: true, nullsFirst: false })
         .order("sort_order", { ascending: true })
         .order("match_datetime", { ascending: true })
         .limit(8),
@@ -583,7 +590,6 @@ export default function HomePage() {
         .eq("tournament_id", tournamentId)
         .eq("status", "completed")
         .eq("is_featured_home", true)
-        .order("match_number", { ascending: false, nullsFirst: false })
         .order("sort_order", { ascending: true })
         .order("match_datetime", { ascending: false })
         .limit(8),
@@ -675,13 +681,25 @@ export default function HomePage() {
         player_id,
         rank_position,
         category,
+        award_category,
         rating,
+        player_display_name,
         player_name_override,
+        team_display_name,
+        player_image_url,
         player_photo_override_url,
+        season_label,
+        period_label,
+        stat_value,
+        sort_order,
+        show_on_homepage,
         players (*)
       `)
+      .eq("show_on_homepage", true)
+      .eq("is_active", true)
+      .order("sort_order", { ascending: true })
       .order("rank_position", { ascending: true })
-      .limit(10);
+      .limit(3);
 
     if (error) {
       console.error(error);
@@ -1077,7 +1095,7 @@ export default function HomePage() {
                           Quick Match View
                         </p>
                         <p className="mt-1 text-sm font-semibold text-slate-500">
-                          Showing next 2 upcoming and latest 2 completed matches.
+                          Showing latest 2 upcoming and latest 2 completed matches.
                         </p>
                       </div>
                       <a
@@ -1227,49 +1245,68 @@ export default function HomePage() {
                     playerRankings.slice(0, 3).map((row) => {
                       const player = getPlayer(row);
                       const basePlayerName = getPlayerName(player);
-                      const playerName = row.player_name_override || basePlayerName;
+                      const playerName =
+                        row.player_display_name ||
+                        row.player_name_override ||
+                        basePlayerName;
                       const playerImage =
+                        row.player_image_url ||
                         row.player_photo_override_url ||
                         player?.image_url ||
                         player?.photo_url ||
                         player?.avatar_url ||
                         player?.profile_image_url ||
                         null;
+                      const rankingCategory =
+                        row.award_category || row.category || "Featured Ranking";
+                      const rankingPeriod =
+                        row.season_label || row.period_label || "Official";
+                      const statLine =
+                        row.stat_value ||
+                        `${rankingCategory} • Rank ${row.rank_position ?? "-"}`;
 
                       return (
                         <div
                           key={row.id}
-                          className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-5 py-3.5 shadow-sm transition hover:-translate-y-[1px] hover:shadow-md"
+                          className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-[1px] hover:shadow-md"
                         >
-                          <div className="flex min-w-0 items-center gap-4">
-                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slate-900 to-slate-700 text-sm font-bold text-white shadow-sm">
-                              {row.rank_position ?? "-"}
-                            </div>
-
-                            {playerImage ? (
-                              <img
-                                src={playerImage}
-                                alt={playerName}
-                                className="h-11 w-11 shrink-0 rounded-full object-cover ring-2 ring-white shadow-sm"
-                              />
-                            ) : (
-                              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-sm font-bold text-emerald-700 ring-1 ring-emerald-100">
-                                {playerName.slice(0, 1).toUpperCase()}
+                          <div className="flex items-center justify-between gap-4">
+                            <div className="flex min-w-0 items-center gap-4">
+                              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slate-900 to-slate-700 text-sm font-bold text-white shadow-sm">
+                                {row.sort_order ?? row.rank_position ?? "-"}
                               </div>
-                            )}
 
-                            <div className="min-w-0">
-                              <p className="truncate text-[15px] font-semibold text-slate-900">
-                                {playerName}
-                              </p>
-                              <p className="text-sm text-slate-500">
-                                {row.category || "Overall Ranking"}
-                              </p>
+                              {playerImage ? (
+                                <img
+                                  src={playerImage}
+                                  alt={playerName}
+                                  className="h-12 w-12 shrink-0 rounded-full object-cover ring-2 ring-white shadow-sm"
+                                />
+                              ) : (
+                                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-sm font-bold text-emerald-700 ring-1 ring-emerald-100">
+                                  {playerName.slice(0, 1).toUpperCase()}
+                                </div>
+                              )}
+
+                              <div className="min-w-0">
+                                <p className="text-[11px] font-black uppercase tracking-[0.18em] text-emerald-700">
+                                  {rankingCategory} • {rankingPeriod}
+                                </p>
+                                <p className="mt-1 truncate text-[16px] font-black text-slate-950">
+                                  {playerName}
+                                </p>
+                                <p className="truncate text-sm text-slate-500">
+                                  {row.team_display_name || statLine}
+                                </p>
+                              </div>
                             </div>
+                            <p className="ml-2 shrink-0 text-lg font-black text-emerald-600">
+                              {row.rating ?? "-"}
+                            </p>
                           </div>
-                          <p className="ml-4 shrink-0 text-lg font-bold text-emerald-600">
-                            {row.rating ?? "-"}
-                          </p>
+                          <div className="mt-3 rounded-xl bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600">
+                            {statLine}
+                          </div>
                         </div>
                       );
                     })
@@ -1819,10 +1856,6 @@ function QuickLink({
   );
 }
 
-function getMatchDisplayNumber(match: MatchRow, fallbackNumber: number) {
-  return match.match_number && match.match_number > 0 ? match.match_number : fallbackNumber;
-}
-
 function MatchCarousel({
   title,
   badge,
@@ -1843,7 +1876,7 @@ function MatchCarousel({
   tournamentSlug: string;
 }) {
   return (
-    <div className="flex h-full flex-col rounded-3xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
+    <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
           <p className="text-sm font-black text-slate-950">{title}</p>
@@ -1862,7 +1895,7 @@ function MatchCarousel({
             <MatchMiniCard
               key={match.id}
               match={match}
-              matchNumber={getMatchDisplayNumber(match, index + 1)}
+              matchNumber={index + 1}
               teams={teams}
               type={type}
               tournamentSlug={tournamentSlug}
@@ -1870,7 +1903,7 @@ function MatchCarousel({
           ))}
         </div>
       ) : (
-        <div className="flex min-h-[8.5rem] items-center rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-sm text-slate-500">
+        <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-sm text-slate-500">
           {emptyText}
         </div>
       )}
@@ -1902,8 +1935,8 @@ function MatchMiniCard({
     >
       <div className="flex flex-col gap-4">
         <div className="flex gap-4">
-          <div className="flex h-11 min-w-[4.6rem] shrink-0 items-center justify-center rounded-2xl bg-slate-900 px-3 text-center text-xs font-black uppercase leading-tight text-white shadow-sm">
-            Match {matchNumber}
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-slate-900 text-center text-xs font-black uppercase leading-tight text-white shadow-sm">
+            M{matchNumber}
           </div>
 
           <div>
