@@ -165,6 +165,7 @@ type MatchRow = {
   scorecard_pdf_url: string | null;
   external_score_url: string | null;
   is_featured_home: boolean | null;
+  match_number: number | null;
   sort_order: number | null;
 };
 
@@ -571,6 +572,7 @@ export default function HomePage() {
         .eq("tournament_id", tournamentId)
         .eq("status", "upcoming")
         .eq("is_featured_home", true)
+        .order("match_number", { ascending: true, nullsFirst: false })
         .order("sort_order", { ascending: true })
         .order("match_datetime", { ascending: true })
         .limit(8),
@@ -581,6 +583,7 @@ export default function HomePage() {
         .eq("tournament_id", tournamentId)
         .eq("status", "completed")
         .eq("is_featured_home", true)
+        .order("match_number", { ascending: false, nullsFirst: false })
         .order("sort_order", { ascending: true })
         .order("match_datetime", { ascending: false })
         .limit(8),
@@ -1074,7 +1077,7 @@ export default function HomePage() {
                           Quick Match View
                         </p>
                         <p className="mt-1 text-sm font-semibold text-slate-500">
-                          Showing latest 2 upcoming and latest 2 completed matches.
+                          Showing next 2 upcoming and latest 2 completed matches.
                         </p>
                       </div>
                       <a
@@ -1816,6 +1819,10 @@ function QuickLink({
   );
 }
 
+function getMatchDisplayNumber(match: MatchRow, fallbackNumber: number) {
+  return match.match_number && match.match_number > 0 ? match.match_number : fallbackNumber;
+}
+
 function MatchCarousel({
   title,
   badge,
@@ -1836,7 +1843,7 @@ function MatchCarousel({
   tournamentSlug: string;
 }) {
   return (
-    <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
+    <div className="flex h-full flex-col rounded-3xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
           <p className="text-sm font-black text-slate-950">{title}</p>
@@ -1855,7 +1862,7 @@ function MatchCarousel({
             <MatchMiniCard
               key={match.id}
               match={match}
-              matchNumber={index + 1}
+              matchNumber={getMatchDisplayNumber(match, index + 1)}
               teams={teams}
               type={type}
               tournamentSlug={tournamentSlug}
@@ -1863,7 +1870,7 @@ function MatchCarousel({
           ))}
         </div>
       ) : (
-        <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-sm text-slate-500">
+        <div className="flex min-h-[8.5rem] items-center rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-sm text-slate-500">
           {emptyText}
         </div>
       )}
@@ -1895,8 +1902,8 @@ function MatchMiniCard({
     >
       <div className="flex flex-col gap-4">
         <div className="flex gap-4">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-slate-900 text-center text-xs font-black uppercase leading-tight text-white shadow-sm">
-            M{matchNumber}
+          <div className="flex h-11 min-w-[4.6rem] shrink-0 items-center justify-center rounded-2xl bg-slate-900 px-3 text-center text-xs font-black uppercase leading-tight text-white shadow-sm">
+            Match {matchNumber}
           </div>
 
           <div>

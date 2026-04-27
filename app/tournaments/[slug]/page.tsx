@@ -73,6 +73,7 @@ type MatchRow = {
   scorecard_pdf_url: string | null;
   external_score_url: string | null;
   is_featured_home: boolean | null;
+  match_number: number | null;
   sort_order: number | null;
 };
 
@@ -663,6 +664,7 @@ export default function PublicTournamentPage() {
           .select("*")
           .eq("tournament_id", tournamentId)
           .eq("status", "upcoming")
+          .order("match_number", { ascending: true, nullsFirst: false })
           .order("match_datetime", { ascending: true })
           .limit(1)
           .maybeSingle(),
@@ -672,6 +674,7 @@ export default function PublicTournamentPage() {
           .select("*")
           .eq("tournament_id", tournamentId)
           .eq("status", "completed")
+          .order("match_number", { ascending: false, nullsFirst: false })
           .order("match_datetime", { ascending: false })
           .limit(1)
           .maybeSingle(),
@@ -680,8 +683,9 @@ export default function PublicTournamentPage() {
           .from("matches")
           .select("*")
           .eq("tournament_id", tournamentId)
-          .order("match_datetime", { ascending: false })
-          .limit(8),
+          .order("match_number", { ascending: true, nullsFirst: false })
+          .order("match_datetime", { ascending: true })
+          .limit(20),
 
         supabase
           .from("news")
@@ -780,6 +784,10 @@ export default function PublicTournamentPage() {
 
   const scheduleGroups = useMemo(() => {
     const sorted = [...recentMatches].sort((a, b) => {
+      const am = a.match_number ?? 9999;
+      const bm = b.match_number ?? 9999;
+      if (am !== bm) return am - bm;
+
       const ad = a.match_datetime ? new Date(a.match_datetime).getTime() : 0;
       const bd = b.match_datetime ? new Date(b.match_datetime).getTime() : 0;
       return ad - bd;
@@ -1223,6 +1231,10 @@ function TournamentHeroMedia({ tournament }: { tournament: TournamentRow }) {
 
   return null;
 }
+function getMatchDisplayNumber(match: MatchRow) {
+  return match.match_number && match.match_number > 0 ? `Match ${match.match_number}` : "Match";
+}
+
 function ScheduleMatchCard({ match, teams }: { match: MatchRow; teams: TeamInfo[] }) {
   const isCompleted = (match.status || "").toLowerCase() === "completed";
   const isLive = (match.status || "").toLowerCase() === "live";
@@ -1232,6 +1244,9 @@ function ScheduleMatchCard({ match, teams }: { match: MatchRow; teams: TeamInfo[
     <div className="grid gap-4 px-4 py-5 lg:grid-cols-[1.2fr_0.7fr_0.9fr] lg:items-center">
       <div className="min-w-0">
         <div className="mb-2 flex flex-wrap items-center gap-2">
+          <span className="inline-flex rounded-full bg-slate-900 px-3 py-1 text-[11px] font-black uppercase tracking-[0.08em] text-white">
+            {getMatchDisplayNumber(match)}
+          </span>
           <span
             className={`inline-flex rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-[0.14em] ${
               isCompleted
