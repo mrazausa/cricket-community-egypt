@@ -1169,7 +1169,7 @@ export default function HomePage() {
                   {loadingTeams ? (
                     [1, 2, 3, 4, 5].map((item) => <SkeletonRank key={item} />)
                   ) : teamRankings.length > 0 ? (
-                    teamRankings.slice(0, 3).map((row) => {
+                    teamRankings.slice(0, 5).map((row) => {
                       const team = getTeam(row);
                       const teamName =
                         row.team_name_override || team?.name || "Unknown Team";
@@ -1242,7 +1242,7 @@ export default function HomePage() {
                   {loadingPlayers ? (
                     [1, 2, 3, 4, 5].map((item) => <SkeletonRank key={item} />)
                   ) : playerRankings.length > 0 ? (
-                    playerRankings.slice(0, 3).map((row) => {
+                    playerRankings.slice(0, 5).map((row) => {
                       const player = getPlayer(row);
                       const basePlayerName = getPlayerName(player);
                       const playerName =
