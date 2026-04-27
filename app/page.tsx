@@ -1067,17 +1067,34 @@ export default function HomePage() {
                     </div>
                   </div>
 
-                  <div className="space-y-6">
+                  <div className="rounded-[2rem] border border-slate-200 bg-white p-4 shadow-sm sm:p-5 lg:p-6">
+                    <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                      <div>
+                        <p className="text-xs font-bold uppercase tracking-[0.22em] text-emerald-700">
+                          Quick Match View
+                        </p>
+                        <p className="mt-1 text-sm font-semibold text-slate-500">
+                          Showing latest 2 upcoming and latest 2 completed matches.
+                        </p>
+                      </div>
+                      <a
+                        href={featuredTournament?.slug ? `/tournaments/${featuredTournament.slug}#schedule` : "/tournaments"}
+                        className="inline-flex h-10 items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-900 transition hover:border-emerald-300 hover:text-emerald-700"
+                      >
+                        View Full Match Center →
+                      </a>
+                    </div>
+
                     {loadingLiveBlocks ? (
                       <EmptyCard text="Loading live tournament updates..." />
                     ) : (
-                      <>
+                      <div className="grid gap-5 lg:grid-cols-2">
                         <MatchCarousel
                           title="Upcoming Matches"
-                          badge="Upcoming"
+                          badge="Next 2"
                           badgeClass="bg-emerald-100 text-emerald-700"
                           emptyText="No upcoming match added yet."
-                          matches={upcomingMatches}
+                          matches={upcomingMatches.slice(0, 2)}
                           teams={tournamentTeams}
                           type="upcoming"
                           tournamentSlug={featuredTournament?.slug || ""}
@@ -1085,15 +1102,15 @@ export default function HomePage() {
 
                         <MatchCarousel
                           title="Completed Results"
-                          badge="Completed"
+                          badge="Latest 2"
                           badgeClass="bg-slate-100 text-slate-700"
                           emptyText="No completed match result yet."
-                          matches={completedMatches}
+                          matches={completedMatches.slice(0, 2)}
                           teams={tournamentTeams}
                           type="completed"
                           tournamentSlug={featuredTournament?.slug || ""}
                         />
-                      </>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -1819,7 +1836,7 @@ function MatchCarousel({
   tournamentSlug: string;
 }) {
   return (
-    <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+    <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
           <p className="text-sm font-black text-slate-950">{title}</p>
@@ -1833,7 +1850,7 @@ function MatchCarousel({
       </div>
 
       {matches.length > 0 ? (
-        <div className={type === "completed" ? "grid gap-3 lg:grid-cols-2" : "space-y-3"}>
+        <div className="space-y-3">
           {matches.map((match, index) => (
             <MatchMiniCard
               key={match.id}
@@ -1874,11 +1891,11 @@ function MatchMiniCard({
   return (
     <a
       href={scheduleLink}
-      className="group block rounded-3xl border border-slate-200 bg-slate-50 p-4 transition hover:-translate-y-[1px] hover:border-emerald-300 hover:bg-white hover:shadow-md sm:p-5"
+      className="group block rounded-3xl border border-slate-200 bg-white p-4 transition hover:-translate-y-[1px] hover:border-emerald-300 hover:shadow-md"
     >
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex flex-col gap-4">
         <div className="flex gap-4">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-slate-900 text-center text-xs font-black uppercase leading-tight text-white shadow-sm">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-slate-900 text-center text-xs font-black uppercase leading-tight text-white shadow-sm">
             M{matchNumber}
           </div>
 
@@ -1886,7 +1903,7 @@ function MatchMiniCard({
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-700">
               {isCompleted ? "Completed Result" : "Upcoming Match"}
             </p>
-            <h4 className="mt-1 text-base font-black leading-snug text-slate-950 sm:text-lg">
+            <h4 className="mt-1 text-base font-black leading-snug text-slate-950">
               {buildHomepageMatchTitle(match, teams)}
             </h4>
 
@@ -1916,13 +1933,13 @@ function MatchMiniCard({
           </div>
         </div>
 
-        <div className="flex shrink-0 flex-wrap gap-2 sm:justify-end">
+        <div className="flex shrink-0 flex-wrap gap-2 pl-[3.75rem]">
           <span className="inline-flex h-9 items-center justify-center rounded-xl bg-slate-900 px-3 text-xs font-bold text-white transition group-hover:bg-emerald-700">
-            Open Schedule
+            Details →
           </span>
           {isCompleted && primaryLink ? (
             <span className="inline-flex h-9 items-center justify-center rounded-xl border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700">
-              Scorecard Available
+              Scorecard
             </span>
           ) : null}
         </div>
