@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import SiteFooter from "@/components/layout/site-footer";
 import SiteHeader from "@/components/layout/site-header";
 import { supabase } from "@/utils/supabase/client";
@@ -961,128 +961,142 @@ export default function HomePage() {
                 </a>
               </div>
 
-              <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
-                <div>
-                <h3 className="text-lg font-bold">Live Tournament Blocks</h3>
+              <div className="space-y-7">
+                <div className="rounded-[28px] border border-slate-200 bg-slate-950 p-5 text-white shadow-lg sm:p-6 lg:p-7">
+                  <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-[0.24em] text-emerald-300">
+                        Tournament Center
+                      </p>
+                      <h3 className="mt-2 text-2xl font-black tracking-tight sm:text-3xl">
+                        Complete tournament coverage in one place
+                      </h3>
+                      <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300">
+                        Open standings, fixtures, statistics, teams, and full tournament details directly from here.
+                      </p>
+                    </div>
 
-                <div className="mt-4 space-y-5">
-                  {loadingLiveBlocks ? (
-                    <EmptyCard text="Loading live tournament updates..." />
-                  ) : (
-                    <>
-                      <MatchCarousel
-                        title="Upcoming Matches"
-                        badge="Upcoming"
-                        badgeClass="bg-emerald-100 text-emerald-700"
-                        emptyText="No upcoming match added yet."
-                        matches={upcomingMatches}
-                        teams={tournamentTeams}
-                        type="upcoming"
-                        tournamentSlug={featuredTournament?.slug || ""}
-                      />
+                    <a
+                      href={
+                        featuredTournament?.slug
+                          ? `/tournaments/${featuredTournament.slug}`
+                          : "/tournaments"
+                      }
+                      className="inline-flex h-12 shrink-0 items-center justify-center rounded-2xl bg-white px-5 text-sm font-black text-slate-950 transition hover:bg-emerald-50"
+                    >
+                      Open Tournament Page
+                    </a>
+                  </div>
 
-                      <MatchCarousel
-                        title="Completed Results"
-                        badge="Completed"
-                        badgeClass="bg-slate-100 text-slate-700"
-                        emptyText="No completed match result yet."
-                        matches={completedMatches}
-                        teams={tournamentTeams}
-                        type="completed"
-                        tournamentSlug={featuredTournament?.slug || ""}
-                      />
-                    </>
-                  )}
+                  <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <a
+                      href={
+                        featuredTournament?.slug
+                          ? `/tournaments/${featuredTournament.slug}#points-table`
+                          : "/tournaments"
+                      }
+                      className="rounded-2xl border border-white/10 bg-white/10 px-4 py-4 transition hover:-translate-y-[1px] hover:bg-white/15"
+                    >
+                      <p className="text-xs font-bold uppercase tracking-[0.2em] text-emerald-300">
+                        Standings
+                      </p>
+                      <p className="mt-2 text-sm font-bold text-white">
+                        Points table and team progress
+                      </p>
+                    </a>
+
+                    <a
+                      href={
+                        featuredTournament?.slug
+                          ? `/tournaments/${featuredTournament.slug}#schedule`
+                          : "/tournaments"
+                      }
+                      className="rounded-2xl border border-white/10 bg-white/10 px-4 py-4 transition hover:-translate-y-[1px] hover:bg-white/15"
+                    >
+                      <p className="text-xs font-bold uppercase tracking-[0.2em] text-emerald-300">
+                        Matches
+                      </p>
+                      <p className="mt-2 text-sm font-bold text-white">
+                        Fixtures and completed results
+                      </p>
+                    </a>
+
+                    <a
+                      href={
+                        featuredTournament?.slug
+                          ? `/tournaments/${featuredTournament.slug}#top-performers`
+                          : "/tournaments"
+                      }
+                      className="rounded-2xl border border-white/10 bg-white/10 px-4 py-4 transition hover:-translate-y-[1px] hover:bg-white/15"
+                    >
+                      <p className="text-xs font-bold uppercase tracking-[0.2em] text-emerald-300">
+                        Statistics
+                      </p>
+                      <p className="mt-2 text-sm font-bold text-white">
+                        Batting, bowling, and MVP race
+                      </p>
+                    </a>
+
+                    <a
+                      href={
+                        featuredTournament?.slug
+                          ? `/tournaments/${featuredTournament.slug}#teams`
+                          : "/tournaments"
+                      }
+                      className="rounded-2xl border border-white/10 bg-white/10 px-4 py-4 transition hover:-translate-y-[1px] hover:bg-white/15"
+                    >
+                      <p className="text-xs font-bold uppercase tracking-[0.2em] text-emerald-300">
+                        Teams
+                      </p>
+                      <p className="mt-2 text-sm font-bold text-white">
+                        Squads and tournament news
+                      </p>
+                    </a>
+                  </div>
                 </div>
-              </div>
 
-              <div>
-  <h3 className="text-lg font-bold">Tournament Center</h3>
-  <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-5">
-    <p className="text-sm font-semibold text-slate-900">
-      Explore the full tournament page for complete coverage.
-    </p>
+                <div>
+                  <div className="mb-4 flex items-end justify-between gap-4">
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-[0.24em] text-emerald-700">
+                        Live Tournament Blocks
+                      </p>
+                      <h3 className="mt-1 text-2xl font-black tracking-tight text-slate-950">
+                        Match Center
+                      </h3>
+                    </div>
+                  </div>
 
-    <div className="mt-4 grid gap-3 sm:grid-cols-2">
-  <a
-    href={
-      featuredTournament?.slug
-        ? `/tournaments/${featuredTournament.slug}#points-table`
-        : "/tournaments"
-    }
-    className="rounded-2xl bg-white px-4 py-4 ring-1 ring-slate-200 transition hover:-translate-y-[1px] hover:bg-slate-50 hover:shadow-md"
-  >
-    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-      Standings
-    </p>
-    <p className="mt-2 text-sm font-semibold text-slate-900">
-      Points table and team progress
-    </p>
-  </a>
+                  <div className="space-y-6">
+                    {loadingLiveBlocks ? (
+                      <EmptyCard text="Loading live tournament updates..." />
+                    ) : (
+                      <>
+                        <MatchCarousel
+                          title="Upcoming Matches"
+                          badge="Upcoming"
+                          badgeClass="bg-emerald-100 text-emerald-700"
+                          emptyText="No upcoming match added yet."
+                          matches={upcomingMatches}
+                          teams={tournamentTeams}
+                          type="upcoming"
+                          tournamentSlug={featuredTournament?.slug || ""}
+                        />
 
-  <a
-    href={
-      featuredTournament?.slug
-        ? `/tournaments/${featuredTournament.slug}#schedule`
-        : "/tournaments"
-    }
-    className="rounded-2xl bg-white px-4 py-4 ring-1 ring-slate-200 transition hover:-translate-y-[1px] hover:bg-slate-50 hover:shadow-md"
-  >
-    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-      Matches
-    </p>
-    <p className="mt-2 text-sm font-semibold text-slate-900">
-      Upcoming fixtures and completed results
-    </p>
-  </a>
-
-  <a
-    href={
-      featuredTournament?.slug
-        ? `/tournaments/${featuredTournament.slug}#points-table`
-        : "/tournaments"
-    }
-    className="rounded-2xl bg-white px-4 py-4 ring-1 ring-slate-200 transition hover:-translate-y-[1px] hover:bg-slate-50 hover:shadow-md"
-  >
-    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-      Statistics
-    </p>
-    <p className="mt-2 text-sm font-semibold text-slate-900">
-      Batting, bowling, and MVP race
-    </p>
-  </a>
-
-  <a
-    href={
-      featuredTournament?.slug
-        ? `/tournaments/${featuredTournament.slug}#teams`
-        : "/tournaments"
-    }
-    className="rounded-2xl bg-white px-4 py-4 ring-1 ring-slate-200 transition hover:-translate-y-[1px] hover:bg-slate-50 hover:shadow-md"
-  >
-    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-      Teams
-    </p>
-    <p className="mt-2 text-sm font-semibold text-slate-900">
-      Participating squads and tournament news
-    </p>
-  </a>
-</div>
-
-    <div className="mt-5">
-      <a
-        href={
-          featuredTournament?.slug
-            ? `/tournaments/${featuredTournament.slug}`
-            : "/tournaments"
-        }
-        className="inline-flex h-11 items-center justify-center rounded-2xl bg-slate-900 px-5 text-sm font-semibold text-white transition hover:bg-slate-800"
-      >
-        Open Tournament Page
-      </a>
-    </div>
-  </div>
-</div>
+                        <MatchCarousel
+                          title="Completed Results"
+                          badge="Completed"
+                          badgeClass="bg-slate-100 text-slate-700"
+                          emptyText="No completed match result yet."
+                          matches={completedMatches}
+                          teams={tournamentTeams}
+                          type="completed"
+                          tournamentSlug={featuredTournament?.slug || ""}
+                        />
+                      </>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           </section>
@@ -1804,46 +1818,37 @@ function MatchCarousel({
   type: "upcoming" | "completed";
   tournamentSlug: string;
 }) {
-  const scrollerRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    if (!matches || matches.length <= 1) return;
-
-    const timer = window.setInterval(() => {
-      const el = scrollerRef.current;
-      if (!el) return;
-
-      const maxScroll = el.scrollWidth - el.clientWidth;
-      if (maxScroll <= 0) return;
-
-      const nextLeft =
-        el.scrollLeft + el.clientWidth >= maxScroll - 20
-          ? 0
-          : el.scrollLeft + Math.min(320, el.clientWidth);
-
-      el.scrollTo({ left: nextLeft, behavior: "smooth" });
-    }, 3500);
-
-    return () => window.clearInterval(timer);
-  }, [matches]);
-
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <p className="text-sm font-bold text-slate-900">{title}</p>
-        <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${badgeClass}`}>
+    <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-black text-slate-950">{title}</p>
+          <p className="mt-1 text-xs font-semibold text-slate-500">
+            {type === "upcoming" ? "Next fixtures in vertical match order" : "Finished games with result summary"}
+          </p>
+        </div>
+        <span className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${badgeClass}`}>
           {badge}
         </span>
       </div>
 
       {matches.length > 0 ? (
-        <div ref={scrollerRef} className="flex snap-x gap-3 overflow-x-auto pb-2">
-          {matches.map((match) => (
-            <MatchMiniCard key={match.id} match={match} teams={teams} type={type} tournamentSlug={tournamentSlug} />
+        <div className={type === "completed" ? "grid gap-3 lg:grid-cols-2" : "space-y-3"}>
+          {matches.map((match, index) => (
+            <MatchMiniCard
+              key={match.id}
+              match={match}
+              matchNumber={index + 1}
+              teams={teams}
+              type={type}
+              tournamentSlug={tournamentSlug}
+            />
           ))}
         </div>
       ) : (
-        <p className="text-sm text-slate-500">{emptyText}</p>
+        <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-sm text-slate-500">
+          {emptyText}
+        </div>
       )}
     </div>
   );
@@ -1851,58 +1856,80 @@ function MatchCarousel({
 
 function MatchMiniCard({
   match,
+  matchNumber,
   teams,
   type,
   tournamentSlug,
 }: {
   match: MatchRow;
+  matchNumber: number;
   teams: TeamInfo[];
   type: "upcoming" | "completed";
   tournamentSlug: string;
 }) {
   const primaryLink = getMatchPrimaryLink(match);
   const scheduleLink = tournamentSlug ? `/tournaments/${tournamentSlug}#schedule` : "/tournaments";
+  const isCompleted = type === "completed";
 
   return (
-    <a href={scheduleLink} className="block min-w-[260px] snap-start rounded-2xl border border-slate-200 bg-slate-50 p-4 transition hover:-translate-y-[1px] hover:border-emerald-300 hover:bg-white hover:shadow-md sm:min-w-[300px]">
-      <p className="text-sm font-semibold text-slate-900">
-        {buildHomepageMatchTitle(match, teams)}
-      </p>
+    <a
+      href={scheduleLink}
+      className="group block rounded-3xl border border-slate-200 bg-slate-50 p-4 transition hover:-translate-y-[1px] hover:border-emerald-300 hover:bg-white hover:shadow-md sm:p-5"
+    >
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex gap-4">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-slate-900 text-center text-xs font-black uppercase leading-tight text-white shadow-sm">
+            M{matchNumber}
+          </div>
 
-      {type === "upcoming" ? (
-        <>
-          <p className="mt-2 text-sm text-slate-600">
-            {formatMatchDateTime(match.match_datetime)}
-          </p>
-          <p className="mt-1 text-sm text-slate-600">
-            Venue: {match.venue || "Venue update soon"}
-          </p>
-        </>
-      ) : (
-        <>
-          <p className="mt-2 text-sm text-slate-600">
-            {match.result_summary || "Result summary not updated"}
-          </p>
-          <p className="mt-1 text-sm text-slate-600">
-            Player of the Match: {match.player_of_match || "Not updated"}
-          </p>
-        </>
-      )}
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-700">
+              {isCompleted ? "Completed Result" : "Upcoming Match"}
+            </p>
+            <h4 className="mt-1 text-base font-black leading-snug text-slate-950 sm:text-lg">
+              {buildHomepageMatchTitle(match, teams)}
+            </h4>
 
-      <div className="mt-3 flex flex-wrap gap-2">
-        <span className="inline-flex h-9 items-center justify-center rounded-xl bg-slate-900 px-3 text-xs font-semibold text-white">
-          Open Schedule
-        </span>
-        {type === "completed" && primaryLink ? (
-          <span className="inline-flex h-9 items-center justify-center rounded-xl border border-slate-300 px-3 text-xs font-semibold text-slate-700">
-            Scorecard Available
+            {isCompleted ? (
+              <div className="mt-3 space-y-1 text-sm text-slate-600">
+                <p>
+                  <span className="font-bold text-slate-900">Result:</span>{" "}
+                  {match.result_summary || "Result summary not updated"}
+                </p>
+                <p>
+                  <span className="font-bold text-slate-900">Player of the Match:</span>{" "}
+                  {match.player_of_match || "Not updated"}
+                </p>
+              </div>
+            ) : (
+              <div className="mt-3 grid gap-2 text-sm text-slate-600 sm:grid-cols-2">
+                <p>
+                  <span className="font-bold text-slate-900">Time:</span>{" "}
+                  {formatMatchDateTime(match.match_datetime)}
+                </p>
+                <p>
+                  <span className="font-bold text-slate-900">Venue:</span>{" "}
+                  {match.venue || "Venue update soon"}
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="flex shrink-0 flex-wrap gap-2 sm:justify-end">
+          <span className="inline-flex h-9 items-center justify-center rounded-xl bg-slate-900 px-3 text-xs font-bold text-white transition group-hover:bg-emerald-700">
+            Open Schedule
           </span>
-        ) : null}
+          {isCompleted && primaryLink ? (
+            <span className="inline-flex h-9 items-center justify-center rounded-xl border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700">
+              Scorecard Available
+            </span>
+          ) : null}
+        </div>
       </div>
     </a>
   );
 }
-
 function EmptyCard({ text }: { text: string }) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white px-4 py-6 text-sm text-slate-500 shadow-sm transition hover:shadow-md">
