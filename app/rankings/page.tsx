@@ -191,29 +191,49 @@ export default function RankingsPage() {
     });
   }, [playerRows]);
 
-  const periodOptions = useMemo(() => {
-    const preferred = ["Last 2 Years", "All Time", "Last 1 Year", "2026", "2025", "2024", "2023", "2022"];
-    const found = Array.from(
+  const preferredPeriodOptions = useMemo(
+    () => ["Last 2 Years", "All Time", "Last 1 Year", "2026", "2025", "2024", "2023", "2022"],
+    []
+  );
+
+  const availablePlayerPeriods = useMemo(() => {
+    return Array.from(
       new Set(
         playerRows
           .map((row) => (row.period_label || row.season_label || "").trim())
           .filter(Boolean)
       )
     );
-    const merged = [
-      ...preferred.filter((period) => found.includes(period)),
-      ...found.filter((period) => !preferred.includes(period)),
-    ];
-    return merged.length > 0 ? merged : preferred;
   }, [playerRows]);
 
-  const periodPlayerRows = useMemo(() => {
-    const periodRows = sortedPlayerRows.filter(
-      (row) => (row.period_label || row.season_label || "All Time") === selectedPeriod
+  const periodOptions = useMemo(() => {
+    const extraPeriods = availablePlayerPeriods.filter(
+      (period) => !preferredPeriodOptions.includes(period)
     );
-    if (periodRows.length > 0) return periodRows;
+
+    return [...preferredPeriodOptions, ...extraPeriods];
+  }, [availablePlayerPeriods, preferredPeriodOptions]);
+
+  useEffect(() => {
+    if (loadingPlayers || availablePlayerPeriods.length === 0) return;
+    if (availablePlayerPeriods.includes(selectedPeriod)) return;
+
+    if (availablePlayerPeriods.includes("Last 2 Years")) {
+      setSelectedPeriod("Last 2 Years");
+      return;
+    }
+
+    if (availablePlayerPeriods.includes("All Time")) {
+      setSelectedPeriod("All Time");
+      return;
+    }
+
+    setSelectedPeriod(availablePlayerPeriods[0]);
+  }, [availablePlayerPeriods, loadingPlayers, selectedPeriod]);
+
+  const periodPlayerRows = useMemo(() => {
     return sortedPlayerRows.filter(
-      (row) => (row.period_label || row.season_label || "All Time") === "All Time"
+      (row) => (row.period_label || row.season_label || "All Time") === selectedPeriod
     );
   }, [sortedPlayerRows, selectedPeriod]);
 
@@ -592,7 +612,7 @@ export default function RankingsPage() {
                     <div className="flex flex-col gap-3 border-b border-slate-200 bg-slate-50/70 p-5 sm:flex-row sm:items-end sm:justify-between">
                       <div>
                         <p className="text-xs font-bold uppercase tracking-[0.22em] text-emerald-700">
-                          {periodPlayerRows.length > 0 ? selectedPeriod : "All Time"}
+                          {selectedPeriod}
                         </p>
                         <h3 className="mt-1 text-2xl font-black text-slate-950">
                           {block.title}
