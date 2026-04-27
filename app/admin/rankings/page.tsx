@@ -308,30 +308,9 @@ export default function AdminRankingsPage() {
       return;
     }
 
-    const cleanRows = rows
-      .map((row) => ({
-        team_id: getValue(row, "team_id").trim(),
-        rank_position: getValue(row, "rank_position").trim(),
-        points: getValue(row, "points").trim(),
-        matches: getValue(row, "matches").trim(),
-        wins: getValue(row, "wins").trim(),
-        form: getValue(row, "form").trim(),
-        rating: getValue(row, "rating").trim(),
-        season_label: getValue(row, "season_label").trim() || "All Time",
-      }))
-      .filter((row) => row.team_id !== "");
-
-    if (!cleanRows.length) {
-      setMessage("Team CSV parsed, but no valid team_id rows were found.");
-      setMessageType("error");
-      setTeamRows([]);
-      setTeamFileName("");
-      return;
-    }
-
-    setTeamRows(cleanRows);
+    setTeamRows(rows as TeamCsvRow[]);
     setTeamFileName(file.name);
-    setMessage(`Team rankings CSV loaded successfully. ${cleanRows.length} rows ready.`);
+    setMessage(`Team rankings CSV loaded successfully. ${rows.length} rows ready.`);
     setMessageType("success");
   }
 
@@ -568,46 +547,42 @@ export default function AdminRankingsPage() {
 
     try {
       const now = new Date().toISOString();
-      const payload = teamRows
-        .map((row) => ({
-          team_id: String(row.team_id || "").trim(),
-          rank_position: toNumber(row.rank_position),
-          points: toNumber(row.points),
-          matches: toNumber(row.matches),
-          wins: toNumber(row.wins),
-          form: String(row.form || "").trim() || null,
-          rating: toNumber(row.rating),
-          season_label: String(row.season_label || "All Time").trim() || "All Time",
-          is_active: true,
-          show_on_homepage: true,
-          sort_order: toNumber(row.rank_position),
-          created_at: now,
-          updated_at: now,
-        }))
-        .filter((row) => row.team_id !== "");
+      const validTeamRows = teamRows.filter((row) => String(row.team_id || "").trim());
 
-      if (!payload.length) {
-        throw new Error("No valid team rows found. Please check that every row has team_id.");
+      if (!validTeamRows.length) {
+        setMessage("Please upload a valid Team Rankings CSV first. Team ID cannot be blank.");
+        setMessageType("error");
+        setSavingTeam(false);
+        return;
       }
 
-      const seasonLabels = Array.from(new Set(payload.map((row) => row.season_label)));
+      const payload = validTeamRows.map((row) => ({
+        team_id: String(row.team_id || "").trim(),
+        rank_position: toNumber(row.rank_position),
+        points: toNumber(row.points),
+        matches: toNumber(row.matches),
+        wins: toNumber(row.wins),
+        form: row.form || null,
+        rating: toNumber(row.rating),
+        season_label: row.season_label || "All Time",
+        is_active: true,
+        show_on_homepage: true,
+        sort_order: toNumber(row.rank_position),
+        created_at: now,
+        updated_at: now,
+      }));
 
-      for (const seasonLabel of seasonLabels) {
-        const { error: deleteError } = await supabase
-          .from("team_rankings")
-          .delete()
-          .eq("season_label", seasonLabel);
-
-        if (deleteError) throw deleteError;
-      }
+      const { error: deleteError } = await supabase
+        .from("team_rankings")
+        .delete()
+        .not("id", "is", null);
+      if (deleteError) throw deleteError;
 
       const { error: insertError } = await supabase.from("team_rankings").insert(payload);
       if (insertError) throw insertError;
 
       setMessage(`Team rankings imported successfully. ${payload.length} rows inserted.`);
       setMessageType("success");
-      setTeamRows([]);
-      setTeamFileName("");
     } catch (error) {
       setMessage(`Failed to import team rankings. ${formatError(error)}`);
       setMessageType("error");
@@ -615,7 +590,6 @@ export default function AdminRankingsPage() {
       setSavingTeam(false);
     }
   }
-
   return (
     <main className="min-h-screen bg-[#f5f7fb] text-slate-900">
       <SiteHeader />
