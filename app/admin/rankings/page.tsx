@@ -7,6 +7,22 @@ import SiteHeader from "@/components/layout/site-header";
 import AdminNav from "@/components/admin/admin-nav";
 import { supabase } from "@/utils/supabase/client";
 
+type CsvRow = Record<string, string>;
+
+type CceRankingRow = {
+  period: string;
+  category: string;
+  rank: number | null;
+  playerName: string;
+  teamName: string;
+  matches: number | null;
+  runs: number | null;
+  wickets: number | null;
+  mvpPoints: number | null;
+  score: number | null;
+  scoreField: string;
+};
+
 type TeamCsvRow = {
   team_id: string;
   rank_position: string;
@@ -18,41 +34,81 @@ type TeamCsvRow = {
   season_label: string;
 };
 
-type PlayerCsvRow = {
-  player_id: string;
-  rank_position: string;
-  category: string;
-  rating: string;
-  stat_value: string;
-  season_label: string;
-};
-
 function parseCsv(text: string) {
-  const lines = text
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
+  const rows: string[][] = [];
+  let current: string[] = [];
+  let value = "";
+  let inQuotes = false;
 
-  if (lines.length < 2) {
-    return { headers: [], rows: [] as Record<string, string>[] };
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text[i];
+    const next = text[i + 1];
+
+    if (char === '"') {
+      if (inQuotes && next === '"') {
+        value += '"';
+        i += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if (char === "," && !inQuotes) {
+      current.push(value.trim());
+      value = "";
+      continue;
+    }
+
+    if ((char === "\n" || char === "\r") && !inQuotes) {
+      if (char === "\r" && next === "\n") i += 1;
+      current.push(value.trim());
+      value = "";
+      if (current.some((item) => item !== "")) rows.push(current);
+      current = [];
+      continue;
+    }
+
+    value += char;
   }
 
-  const headers = lines[0].split(",").map((h) => h.trim());
-  const rows = lines.slice(1).map((line) => {
-    const values = line.split(",").map((v) => v.trim());
-    const row: Record<string, string> = {};
+  current.push(value.trim());
+  if (current.some((item) => item !== "")) rows.push(current);
+
+  if (rows.length < 2) return { headers: [] as string[], rows: [] as CsvRow[] };
+
+  const headers = rows[0].map((header) => header.trim());
+  const dataRows = rows.slice(1).map((items) => {
+    const row: CsvRow = {};
     headers.forEach((header, index) => {
-      row[header] = values[index] ?? "";
+      row[header] = items[index]?.trim() ?? "";
     });
     return row;
   });
 
-  return { headers, rows };
+  return { headers, rows: dataRows };
+}
+
+function toNumber(value: string | number | null | undefined) {
+  if (value === null || value === undefined) return null;
+  const text = String(value).replace(/,/g, "").trim();
+  if (!text) return null;
+  const numberValue = Number(text);
+  return Number.isFinite(numberValue) ? numberValue : null;
 }
 
 function hasRequiredHeaders(headers: string[], required: string[]) {
-  const headerSet = new Set(headers);
-  return required.every((item) => headerSet.has(item));
+  const normalized = new Set(headers.map((header) => header.trim().toLowerCase()));
+  return required.every((item) => normalized.has(item.toLowerCase()));
+}
+
+function getValue(row: CsvRow, key: string) {
+  const exact = row[key];
+  if (exact !== undefined) return exact;
+  const foundKey = Object.keys(row).find(
+    (item) => item.trim().toLowerCase() === key.trim().toLowerCase()
+  );
+  return foundKey ? row[foundKey] : "";
 }
 
 function formatError(error: any) {
@@ -66,23 +122,137 @@ function formatError(error: any) {
   }
 }
 
+function normalizeCategory(category: string) {
+  const value = category.trim();
+  if (!value) return "Overall";
+  return value;
+}
+
+function badgeForCategory(category: string) {
+  const lower = category.toLowerCase();
+  if (lower.includes("mvp") || lower.includes("overall")) return "gold";
+  if (lower.includes("bat") || lower.includes("run")) return "emerald";
+  if (lower.includes("bowl") || lower.includes("wicket")) return "blue";
+  if (lower.includes("round")) return "purple";
+  if (lower.includes("field")) return "rose";
+  return "slate";
+}
+
+function buildStatValue(row: CceRankingRow) {
+  const parts = [
+    `${row.runs ?? 0} runs`,
+    `${row.wickets ?? 0} wkts`,
+    `${row.matches ?? 0} matches`,
+  ];
+
+  if (row.mvpPoints !== null) parts.push(`MVP ${row.mvpPoints}`);
+  if (row.score !== null) parts.push(`Score ${row.score}`);
+
+  return parts.join(" • ");
+}
+
+function mapCceRow(row: CsvRow): CceRankingRow {
+  return {
+    period: getValue(row, "Period") || "All Time",
+    category: normalizeCategory(getValue(row, "Category")),
+    rank: toNumber(getValue(row, "Rank")),
+    playerName: getValue(row, "Player Name"),
+    teamName: getValue(row, "Team Name"),
+    matches: toNumber(getValue(row, "Matches")),
+    runs: toNumber(getValue(row, "Runs")),
+    wickets: toNumber(getValue(row, "Wickets")),
+    mvpPoints: toNumber(getValue(row, "MVP Points")),
+    score: toNumber(getValue(row, "Score")),
+    scoreField: getValue(row, "Score Field"),
+  };
+}
+
+function uniqueSorted(values: string[]) {
+  return Array.from(new Set(values.filter(Boolean))).sort((a, b) => a.localeCompare(b));
+}
+
 export default function AdminRankingsPage() {
+  const [cceRows, setCceRows] = useState<CceRankingRow[]>([]);
   const [teamRows, setTeamRows] = useState<TeamCsvRow[]>([]);
-  const [playerRows, setPlayerRows] = useState<PlayerCsvRow[]>([]);
+  const [cceFileName, setCceFileName] = useState("");
   const [teamFileName, setTeamFileName] = useState("");
-  const [playerFileName, setPlayerFileName] = useState("");
+  const [selectedPeriod, setSelectedPeriod] = useState("All Time");
+  const [selectedCategory, setSelectedCategory] = useState("All Categories");
+  const [savingCce, setSavingCce] = useState(false);
   const [savingTeam, setSavingTeam] = useState(false);
-  const [savingPlayer, setSavingPlayer] = useState(false);
   const [message, setMessage] = useState("");
   const [messageType, setMessageType] = useState<"success" | "error" | "">("");
 
-  const validTeamCsv = useMemo(() => {
-    return teamRows.length > 0;
-  }, [teamRows]);
+  const periods = useMemo(() => uniqueSorted(cceRows.map((row) => row.period)), [cceRows]);
+  const categories = useMemo(() => uniqueSorted(cceRows.map((row) => row.category)), [cceRows]);
 
-  const validPlayerCsv = useMemo(() => {
-    return playerRows.length > 0;
-  }, [playerRows]);
+  const filteredCceRows = useMemo(() => {
+    return cceRows.filter((row) => {
+      const periodOk = selectedPeriod === "All Periods" || row.period === selectedPeriod;
+      const categoryOk = selectedCategory === "All Categories" || row.category === selectedCategory;
+      return periodOk && categoryOk;
+    });
+  }, [cceRows, selectedPeriod, selectedCategory]);
+
+  const groupedSummary = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const row of cceRows) {
+      const key = `${row.period}|||${row.category}`;
+      map.set(key, (map.get(key) || 0) + 1);
+    }
+    return Array.from(map.entries()).map(([key, count]) => {
+      const [period, category] = key.split("|||");
+      return { period, category, count };
+    });
+  }, [cceRows]);
+
+  async function handleCceCsvUpload(file: File) {
+    setMessage("");
+    setMessageType("");
+
+    const text = await file.text();
+    const { headers, rows } = parseCsv(text);
+    const requiredHeaders = [
+      "Period",
+      "Category",
+      "Rank",
+      "Player Name",
+      "Team Name",
+      "Matches",
+      "Runs",
+      "Wickets",
+      "MVP Points",
+      "Score",
+      "Score Field",
+    ];
+
+    if (!hasRequiredHeaders(headers, requiredHeaders)) {
+      setMessage(`Invalid CCE Ranking CSV. Required headers: ${requiredHeaders.join(", ")}`);
+      setMessageType("error");
+      setCceRows([]);
+      setCceFileName("");
+      return;
+    }
+
+    const mapped = rows
+      .map(mapCceRow)
+      .filter((row) => row.playerName && row.category && row.period && row.rank !== null);
+
+    if (!mapped.length) {
+      setMessage("CSV parsed, but no valid ranking rows were found.");
+      setMessageType("error");
+      setCceRows([]);
+      setCceFileName("");
+      return;
+    }
+
+    setCceRows(mapped);
+    setCceFileName(file.name);
+    setSelectedPeriod(mapped.some((row) => row.period === "All Time") ? "All Time" : mapped[0].period);
+    setSelectedCategory("All Categories");
+    setMessage(`CCE ranking CSV loaded successfully. ${mapped.length} rows ready.`);
+    setMessageType("success");
+  }
 
   async function handleTeamCsvUpload(file: File) {
     setMessage("");
@@ -90,7 +260,6 @@ export default function AdminRankingsPage() {
 
     const text = await file.text();
     const { headers, rows } = parseCsv(text);
-
     const requiredHeaders = [
       "team_id",
       "rank_position",
@@ -103,9 +272,7 @@ export default function AdminRankingsPage() {
     ];
 
     if (!hasRequiredHeaders(headers, requiredHeaders)) {
-      setMessage(
-        `Invalid Team Rankings CSV. Required headers: ${requiredHeaders.join(", ")}`
-      );
+      setMessage(`Invalid Team Rankings CSV. Required headers: ${requiredHeaders.join(", ")}`);
       setMessageType("error");
       setTeamRows([]);
       setTeamFileName("");
@@ -118,40 +285,107 @@ export default function AdminRankingsPage() {
     setMessageType("success");
   }
 
-  async function handlePlayerCsvUpload(file: File) {
-    setMessage("");
-    setMessageType("");
-
-    const text = await file.text();
-    const { headers, rows } = parseCsv(text);
-
-    const requiredHeaders = [
-      "player_id",
-      "rank_position",
-      "category",
-      "rating",
-      "stat_value",
-      "season_label",
-    ];
-
-    if (!hasRequiredHeaders(headers, requiredHeaders)) {
-      setMessage(
-        `Invalid Player Rankings CSV. Required headers: ${requiredHeaders.join(", ")}`
-      );
+  async function importCceRankings() {
+    if (!filteredCceRows.length) {
+      setMessage("Please upload a valid CCE ranking CSV and select rows to import.");
       setMessageType("error");
-      setPlayerRows([]);
-      setPlayerFileName("");
       return;
     }
 
-    setPlayerRows(rows as PlayerCsvRow[]);
-    setPlayerFileName(file.name);
-    setMessage(`Player rankings CSV loaded successfully. ${rows.length} rows ready.`);
-    setMessageType("success");
+    setSavingCce(true);
+    setMessage("");
+    setMessageType("");
+
+    try {
+      const importBatchId = crypto.randomUUID();
+      const now = new Date().toISOString();
+      const groups = new Map<string, CceRankingRow[]>();
+
+      for (const row of filteredCceRows) {
+        const key = `${row.period}|||${row.category}`;
+        const current = groups.get(key) || [];
+        current.push(row);
+        groups.set(key, current);
+      }
+
+      for (const [key] of groups) {
+        const [period, category] = key.split("|||");
+        const { error: deleteError } = await supabase
+          .from("player_rankings")
+          .delete()
+          .eq("season_label", period)
+          .eq("award_category", category);
+
+        if (deleteError) throw deleteError;
+      }
+
+      const payload = filteredCceRows.map((row, index) => {
+        const rating = row.category.toLowerCase().includes("mvp")
+          ? row.mvpPoints ?? row.score ?? 0
+          : row.score ?? row.mvpPoints ?? 0;
+
+        return {
+          player_id: null,
+          rank_position: row.rank,
+          category: row.category,
+          award_category: row.category,
+          badge_color: badgeForCategory(row.category),
+          player_display_name: row.playerName,
+          player_name_override: row.playerName,
+          team_display_name: row.teamName,
+          matches: row.matches ?? 0,
+          runs: row.runs ?? 0,
+          wickets: row.wickets ?? 0,
+          average: 0,
+          strike_rate: 0,
+          economy: 0,
+          rating,
+          stat_value: buildStatValue(row),
+          season: row.period,
+          season_label: row.period,
+          period_label: row.period,
+          source_file: cceFileName || "CCE_Category_Top10_By_Period.csv",
+          score_field: row.scoreField,
+          mvp_points: row.mvpPoints ?? 0,
+          sort_order: row.rank ?? index + 1,
+          is_active: true,
+          show_on_homepage: row.period === "All Time" && row.rank !== null && row.rank <= 3,
+          import_batch_id: importBatchId,
+          created_at: now,
+          updated_at: now,
+        };
+      });
+
+      const { error: insertError } = await supabase.from("player_rankings").insert(payload);
+      if (insertError) throw insertError;
+
+      const logRows = Array.from(groups.entries()).map(([key, rows]) => {
+        const [period, category] = key.split("|||");
+        return {
+          source_file: cceFileName || "CCE_Category_Top10_By_Period.csv",
+          import_type: "CCE_CATEGORY_TOP10",
+          period_label: period,
+          category_label: category,
+          rows_imported: rows.length,
+          imported_by: "admin",
+        };
+      });
+
+      const { error: logError } = await supabase.from("ranking_import_logs").insert(logRows);
+      if (logError) console.warn("Ranking import log failed:", logError);
+
+      setMessage(`CCE player rankings imported successfully. ${payload.length} rows inserted.`);
+      setMessageType("success");
+    } catch (error) {
+      setMessage(`Failed to import CCE rankings. ${formatError(error)}`);
+      setMessageType("error");
+    } finally {
+      setSavingCce(false);
+    }
   }
 
   async function importTeamRankings() {
-    if (!validTeamCsv) {
+    if (!teamRows.length) {
       setMessage("Please upload a valid Team Rankings CSV first.");
       setMessageType("error");
       return;
@@ -164,44 +398,21 @@ export default function AdminRankingsPage() {
     try {
       const payload = teamRows.map((row) => ({
         team_id: row.team_id || null,
-        rank_position: row.rank_position ? Number(row.rank_position) : null,
-        points: row.points ? Number(row.points) : null,
-        matches: row.matches ? Number(row.matches) : null,
-        wins: row.wins ? Number(row.wins) : null,
+        rank_position: toNumber(row.rank_position),
+        points: toNumber(row.points),
+        matches: toNumber(row.matches),
+        wins: toNumber(row.wins),
         form: row.form || null,
-        rating: row.rating ? Number(row.rating) : null,
+        rating: toNumber(row.rating),
         season_label: row.season_label || null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       }));
 
-      const invalidNumeric = payload.some(
-        (row) =>
-          (row.rank_position !== null && Number.isNaN(row.rank_position)) ||
-          (row.points !== null && Number.isNaN(row.points)) ||
-          (row.matches !== null && Number.isNaN(row.matches)) ||
-          (row.wins !== null && Number.isNaN(row.wins)) ||
-          (row.rating !== null && Number.isNaN(row.rating))
-      );
-
-      if (invalidNumeric) {
-        setMessage("Team CSV has invalid numeric values.");
-        setMessageType("error");
-        setSavingTeam(false);
-        return;
-      }
-
-      const { error: deleteError } = await supabase
-        .from("team_rankings")
-        .delete()
-        .neq("id", "");
-
+      const { error: deleteError } = await supabase.from("team_rankings").delete().neq("id", "");
       if (deleteError) throw deleteError;
 
-      const { error: insertError } = await supabase
-        .from("team_rankings")
-        .insert(payload);
-
+      const { error: insertError } = await supabase.from("team_rankings").insert(payload);
       if (insertError) throw insertError;
 
       setMessage(`Team rankings imported successfully. ${payload.length} rows inserted.`);
@@ -211,65 +422,6 @@ export default function AdminRankingsPage() {
       setMessageType("error");
     } finally {
       setSavingTeam(false);
-    }
-  }
-
-  async function importPlayerRankings() {
-    if (!validPlayerCsv) {
-      setMessage("Please upload a valid Player Rankings CSV first.");
-      setMessageType("error");
-      return;
-    }
-
-    setSavingPlayer(true);
-    setMessage("");
-    setMessageType("");
-
-    try {
-      const payload = playerRows.map((row) => ({
-        player_id: row.player_id || null,
-        rank_position: row.rank_position ? Number(row.rank_position) : null,
-        category: row.category || null,
-        rating: row.rating ? Number(row.rating) : null,
-        stat_value: row.stat_value || null,
-        season_label: row.season_label || null,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      }));
-
-      const invalidNumeric = payload.some(
-        (row) =>
-          (row.rank_position !== null && Number.isNaN(row.rank_position)) ||
-          (row.rating !== null && Number.isNaN(row.rating))
-      );
-
-      if (invalidNumeric) {
-        setMessage("Player CSV has invalid numeric values.");
-        setMessageType("error");
-        setSavingPlayer(false);
-        return;
-      }
-
-      const { error: deleteError } = await supabase
-        .from("player_rankings")
-        .delete()
-        .neq("id", "");
-
-      if (deleteError) throw deleteError;
-
-      const { error: insertError } = await supabase
-        .from("player_rankings")
-        .insert(payload);
-
-      if (insertError) throw insertError;
-
-      setMessage(`Player rankings imported successfully. ${payload.length} rows inserted.`);
-      setMessageType("success");
-    } catch (error) {
-      setMessage(`Failed to import player rankings. ${formatError(error)}`);
-      setMessageType("error");
-    } finally {
-      setSavingPlayer(false);
     }
   }
 
@@ -284,11 +436,10 @@ export default function AdminRankingsPage() {
             Rankings Import Hub
           </p>
           <h1 className="max-w-3xl text-3xl font-bold leading-tight sm:text-5xl">
-            Import team and player rankings quickly through CSV.
+            Build CCE rankings automatically from CSV.
           </h1>
           <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-200 sm:text-base">
-            Upload your latest standings and player leaderboard during the tournament,
-            then use the manual editors only for small corrections.
+            Upload the consolidated CCE category CSV, preview period/category rows, then import only the selected ranking group without deleting other rankings.
           </p>
         </div>
       </section>
@@ -307,14 +458,144 @@ export default function AdminRankingsPage() {
         ) : null}
       </section>
 
-      <section className="mx-auto grid max-w-7xl gap-6 px-4 pb-8 sm:px-6 lg:grid-cols-2 lg:px-8">
+      <section className="mx-auto max-w-7xl px-4 pb-8 sm:px-6 lg:px-8">
         <div className="rounded-3xl bg-white p-6 shadow-md ring-1 ring-slate-200">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700">
-            Team Rankings CSV
-          </p>
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700">
+                CCE Category Top 10 CSV
+              </p>
+              <h2 className="mt-2 text-2xl font-bold">Import Player Ranking Engine</h2>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+                Recommended file: CCE_Category_Top10_By_Period.csv. The import maps Period, Category, Rank, Player Name, Team Name, Matches, Runs, Wickets, MVP Points, Score, and Score Field into player_rankings.
+              </p>
+            </div>
+            <Link
+              href="/admin/player-rankings"
+              className="inline-flex h-11 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+            >
+              Open Manual Editor
+            </Link>
+          </div>
+
+          <input
+            type="file"
+            accept=".csv"
+            className="mt-5 block w-full text-sm"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handleCceCsvUpload(file);
+            }}
+          />
+
+          {cceFileName ? <p className="mt-3 text-sm text-slate-600">Loaded file: {cceFileName}</p> : null}
+
+          {cceRows.length > 0 ? (
+            <div className="mt-6 grid gap-4 lg:grid-cols-[280px_280px_1fr]">
+              <label className="block">
+                <span className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Period</span>
+                <select
+                  value={selectedPeriod}
+                  onChange={(e) => setSelectedPeriod(e.target.value)}
+                  className="mt-2 h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm font-semibold"
+                >
+                  <option value="All Periods">All Periods</option>
+                  {periods.map((period) => (
+                    <option key={period} value={period}>
+                      {period}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="block">
+                <span className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Category</span>
+                <select
+                  value={selectedCategory}
+                  onChange={(e) => setSelectedCategory(e.target.value)}
+                  className="mt-2 h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm font-semibold"
+                >
+                  <option value="All Categories">All Categories</option>
+                  {categories.map((category) => (
+                    <option key={category} value={category}>
+                      {category}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-700 ring-1 ring-slate-200">
+                <p className="font-bold text-slate-900">Selected import scope</p>
+                <p className="mt-1">Rows ready: {filteredCceRows.length}</p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Existing rows are deleted only for the same Period + Category being imported.
+                </p>
+              </div>
+            </div>
+          ) : null}
+
+          {groupedSummary.length > 0 ? (
+            <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {groupedSummary.slice(0, 12).map((item) => (
+                <div key={`${item.period}-${item.category}`} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">{item.period}</p>
+                  <p className="mt-1 font-black text-slate-900">{item.category}</p>
+                  <p className="mt-1 text-sm text-slate-600">{item.count} rows</p>
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          {filteredCceRows.length > 0 ? (
+            <div className="mt-6 overflow-x-auto rounded-2xl border border-slate-200">
+              <table className="min-w-full text-sm">
+                <thead className="bg-slate-50 text-left">
+                  <tr>
+                    <th className="px-3 py-3 font-semibold">Period</th>
+                    <th className="px-3 py-3 font-semibold">Category</th>
+                    <th className="px-3 py-3 font-semibold">Rank</th>
+                    <th className="px-3 py-3 font-semibold">Player</th>
+                    <th className="px-3 py-3 font-semibold">Team</th>
+                    <th className="px-3 py-3 font-semibold">Runs</th>
+                    <th className="px-3 py-3 font-semibold">Wkts</th>
+                    <th className="px-3 py-3 font-semibold">Rating</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredCceRows.slice(0, 15).map((row, index) => (
+                    <tr key={`${row.period}-${row.category}-${row.rank}-${row.playerName}-${index}`} className="border-t border-slate-200">
+                      <td className="px-3 py-3">{row.period}</td>
+                      <td className="px-3 py-3">{row.category}</td>
+                      <td className="px-3 py-3 font-bold">#{row.rank}</td>
+                      <td className="px-3 py-3 font-semibold">{row.playerName}</td>
+                      <td className="px-3 py-3">{row.teamName}</td>
+                      <td className="px-3 py-3">{row.runs ?? 0}</td>
+                      <td className="px-3 py-3">{row.wickets ?? 0}</td>
+                      <td className="px-3 py-3">{row.score ?? row.mvpPoints ?? 0}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+
+          <button
+            type="button"
+            onClick={importCceRankings}
+            disabled={savingCce || filteredCceRows.length === 0}
+            className="mt-6 inline-flex h-12 items-center justify-center rounded-2xl bg-emerald-600 px-5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {savingCce ? "Importing..." : `Import Selected CCE Rankings (${filteredCceRows.length})`}
+          </button>
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-7xl px-4 pb-8 sm:px-6 lg:px-8">
+        <div className="rounded-3xl bg-white p-6 shadow-md ring-1 ring-slate-200">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700">Optional Team Rankings CSV</p>
           <h2 className="mt-2 text-2xl font-bold">Import Team Standings</h2>
           <p className="mt-2 text-sm leading-6 text-slate-600">
-            Required columns: team_id, rank_position, points, matches, wins, form, rating, season_label
+            Use this only when you have a team standings CSV with required columns: team_id, rank_position, points, matches, wins, form, rating, season_label.
           </p>
 
           <input
@@ -327,9 +608,7 @@ export default function AdminRankingsPage() {
             }}
           />
 
-          {teamFileName ? (
-            <p className="mt-3 text-sm text-slate-600">Loaded file: {teamFileName}</p>
-          ) : null}
+          {teamFileName ? <p className="mt-3 text-sm text-slate-600">Loaded file: {teamFileName}</p> : null}
 
           {teamRows.length > 0 ? (
             <div className="mt-5 overflow-x-auto rounded-2xl border border-slate-200">
@@ -361,94 +640,24 @@ export default function AdminRankingsPage() {
           <button
             type="button"
             onClick={importTeamRankings}
-            disabled={savingTeam || !validTeamCsv}
+            disabled={savingTeam || teamRows.length === 0}
             className="mt-6 inline-flex h-12 items-center justify-center rounded-2xl bg-emerald-600 px-5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {savingTeam ? "Importing..." : "Import Team Rankings"}
-          </button>
-        </div>
-
-        <div className="rounded-3xl bg-white p-6 shadow-md ring-1 ring-slate-200">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700">
-            Player Rankings CSV
-          </p>
-          <h2 className="mt-2 text-2xl font-bold">Import Player Leaderboard</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-600">
-            Required columns: player_id, rank_position, category, rating, stat_value, season_label
-          </p>
-
-          <input
-            type="file"
-            accept=".csv"
-            className="mt-5 block w-full text-sm"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) handlePlayerCsvUpload(file);
-            }}
-          />
-
-          {playerFileName ? (
-            <p className="mt-3 text-sm text-slate-600">Loaded file: {playerFileName}</p>
-          ) : null}
-
-          {playerRows.length > 0 ? (
-            <div className="mt-5 overflow-x-auto rounded-2xl border border-slate-200">
-              <table className="min-w-full text-sm">
-                <thead className="bg-slate-50 text-left">
-                  <tr>
-                    <th className="px-3 py-3 font-semibold">Player ID</th>
-                    <th className="px-3 py-3 font-semibold">Rank</th>
-                    <th className="px-3 py-3 font-semibold">Category</th>
-                    <th className="px-3 py-3 font-semibold">Rating</th>
-                    <th className="px-3 py-3 font-semibold">Stats</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {playerRows.slice(0, 10).map((row, index) => (
-                    <tr key={index} className="border-t border-slate-200">
-                      <td className="px-3 py-3">{row.player_id}</td>
-                      <td className="px-3 py-3">{row.rank_position}</td>
-                      <td className="px-3 py-3">{row.category}</td>
-                      <td className="px-3 py-3">{row.rating}</td>
-                      <td className="px-3 py-3">{row.stat_value}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : null}
-
-          <button
-            type="button"
-            onClick={importPlayerRankings}
-            disabled={savingPlayer || !validPlayerCsv}
-            className="mt-6 inline-flex h-12 items-center justify-center rounded-2xl bg-emerald-600 px-5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {savingPlayer ? "Importing..." : "Import Player Rankings"}
           </button>
         </div>
       </section>
 
       <section className="mx-auto max-w-7xl px-4 pb-10 sm:px-6 lg:px-8">
         <div className="grid gap-4 sm:grid-cols-2">
-          <Link
-            href="/admin/team-rankings"
-            className="rounded-3xl border border-slate-200 bg-white p-5 shadow-md transition hover:-translate-y-1 hover:shadow-lg"
-          >
-            <h3 className="text-xl font-bold text-slate-900">Team Rankings Editor</h3>
-            <p className="mt-2 text-sm leading-6 text-slate-600">
-              Fine-tune standings manually after CSV import.
-            </p>
+          <Link href="/admin/player-rankings" className="rounded-3xl border border-slate-200 bg-white p-5 shadow-md transition hover:-translate-y-1 hover:shadow-lg">
+            <h3 className="text-xl font-bold text-slate-900">Player Rankings Editor</h3>
+            <p className="mt-2 text-sm leading-6 text-slate-600">Fine-tune names, photos, stats, homepage visibility, and active status after CSV import.</p>
           </Link>
 
-          <Link
-            href="/admin/player-rankings"
-            className="rounded-3xl border border-slate-200 bg-white p-5 shadow-md transition hover:-translate-y-1 hover:shadow-lg"
-          >
-            <h3 className="text-xl font-bold text-slate-900">Player Rankings Editor</h3>
-            <p className="mt-2 text-sm leading-6 text-slate-600">
-              Correct category, stats, or rating row by row after import.
-            </p>
+          <Link href="/admin/team-rankings" className="rounded-3xl border border-slate-200 bg-white p-5 shadow-md transition hover:-translate-y-1 hover:shadow-lg">
+            <h3 className="text-xl font-bold text-slate-900">Team Rankings Editor</h3>
+            <p className="mt-2 text-sm leading-6 text-slate-600">Upload logos and correct standings manually if required.</p>
           </Link>
         </div>
       </section>
