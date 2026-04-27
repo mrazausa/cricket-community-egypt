@@ -546,36 +546,20 @@ export default function AdminRankingsPage() {
     setMessageType("");
 
     try {
-      const now = new Date().toISOString();
-      const validTeamRows = teamRows.filter((row) => String(row.team_id || "").trim());
-
-      if (!validTeamRows.length) {
-        setMessage("Please upload a valid Team Rankings CSV first. Team ID cannot be blank.");
-        setMessageType("error");
-        setSavingTeam(false);
-        return;
-      }
-
-      const payload = validTeamRows.map((row) => ({
-        team_id: String(row.team_id || "").trim(),
+      const payload = teamRows.map((row) => ({
+        team_id: row.team_id || null,
         rank_position: toNumber(row.rank_position),
         points: toNumber(row.points),
         matches: toNumber(row.matches),
         wins: toNumber(row.wins),
         form: row.form || null,
         rating: toNumber(row.rating),
-        season_label: row.season_label || "All Time",
-        is_active: true,
-        show_on_homepage: true,
-        sort_order: toNumber(row.rank_position),
-        created_at: now,
-        updated_at: now,
+        season_label: row.season_label || null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       }));
 
-      const { error: deleteError } = await supabase
-        .from("team_rankings")
-        .delete()
-        .not("id", "is", null);
+      const { error: deleteError } = await supabase.from("team_rankings").delete().neq("id", "");
       if (deleteError) throw deleteError;
 
       const { error: insertError } = await supabase.from("team_rankings").insert(payload);
@@ -590,6 +574,7 @@ export default function AdminRankingsPage() {
       setSavingTeam(false);
     }
   }
+
   return (
     <main className="min-h-screen bg-[#f5f7fb] text-slate-900">
       <SiteHeader />
@@ -932,6 +917,21 @@ export default function AdminRankingsPage() {
                           }}
                           className="max-w-[210px] text-xs"
                         />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            updateRankingRow(row.id, {
+                              show_on_homepage: row.show_on_homepage === true,
+                              sort_order: row.sort_order ?? 0,
+                              player_image_url: row.player_image_url,
+                              player_photo_override_url: row.player_photo_override_url ?? null,
+                            })
+                          }
+                          disabled={updatingRankingId === row.id}
+                          className="inline-flex h-10 items-center justify-center rounded-2xl bg-slate-950 px-4 text-xs font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {updatingRankingId === row.id ? "Saving..." : "Save"}
+                        </button>
                         {updatingRankingId === row.id ? <span className="text-xs font-semibold text-emerald-700">Saving...</span> : null}
                       </div>
                     </div>
