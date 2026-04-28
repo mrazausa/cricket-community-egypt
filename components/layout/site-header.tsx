@@ -14,11 +14,15 @@ type HeaderSettings = {
   header_menu_gap?: number | null;
 };
 
-type SitePageSetting = {
-  page_key: string;
-  title: string | null;
-  is_visible: boolean;
-  show_in_menu: boolean;
+type MenuItem = {
+  id?: string;
+  menu_key: string;
+  label: string;
+  href: string;
+  is_visible: boolean | null;
+  sort_order: number | null;
+  is_button: boolean | null;
+  is_admin_only: boolean | null;
 };
 
 const fallbackHeader: Required<HeaderSettings> = {
@@ -32,34 +36,23 @@ const fallbackHeader: Required<HeaderSettings> = {
   header_menu_gap: 18,
 };
 
-const fallbackPublicNav = [
-  { name: "Home", href: "/" },
-  { name: "Tournaments", href: "/tournaments" },
-  { name: "Rankings", href: "/rankings" },
-  { name: "Teams", href: "/teams" },
-  { name: "Players", href: "/players" },
+const fallbackPublicNav: MenuItem[] = [
+  { menu_key: "home", label: "Home", href: "/", is_visible: true, sort_order: 1, is_button: false, is_admin_only: false },
+  { menu_key: "tournaments", label: "Tournaments", href: "/tournaments", is_visible: true, sort_order: 2, is_button: false, is_admin_only: false },
+  { menu_key: "rankings", label: "Rankings", href: "/rankings", is_visible: true, sort_order: 3, is_button: false, is_admin_only: false },
+  { menu_key: "teams", label: "Teams", href: "/teams", is_visible: true, sort_order: 4, is_button: false, is_admin_only: false },
+  { menu_key: "players", label: "Players", href: "/players", is_visible: false, sort_order: 5, is_button: false, is_admin_only: false },
 ];
-
-function mapPageKeyToHref(pageKey: string) {
-  if (pageKey === "home") return "/";
-  if (pageKey === "tournaments") return "/tournaments";
-  if (pageKey === "teams") return "/teams";
-  if (pageKey === "players") return "/players";
-  if (pageKey === "media") return "/media";
-  if (pageKey === "history") return "/history";
-  if (pageKey === "register_team") return "/register/team";
-  if (pageKey === "register_player") return "/register/player";
-  return "/";
-}
 
 export default function SiteHeader() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [registerOpen, setRegisterOpen] = useState(false);
-  const [headerSettings, setHeaderSettings] =
-    useState<HeaderSettings>(fallbackHeader);
+  const [headerSettings, setHeaderSettings] = useState<HeaderSettings>(fallbackHeader);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [loadingAuth, setLoadingAuth] = useState(true);
-  const [publicNavItems, setPublicNavItems] = useState(fallbackPublicNav);
+  const [publicNavItems, setPublicNavItems] = useState<MenuItem[]>(
+    fallbackPublicNav.filter((item) => item.is_visible !== false)
+  );
 
   const registerRef = useRef<HTMLDivElement | null>(null);
 
@@ -79,29 +72,38 @@ export default function SiteHeader() {
         console.error("Failed to load header settings:", error);
         return;
       }
-
       if (!mounted) return;
 
       setHeaderSettings({
-        header_logo_url:
-          data?.header_logo_url ?? fallbackHeader.header_logo_url,
-        header_site_name:
-          data?.header_site_name ?? fallbackHeader.header_site_name,
-        header_tagline:
-          data?.header_tagline ?? fallbackHeader.header_tagline,
-        header_logo_height:
-          data?.header_logo_height ?? fallbackHeader.header_logo_height,
-        header_site_name_font_size:
-          data?.header_site_name_font_size ??
-          fallbackHeader.header_site_name_font_size,
-        header_tagline_font_size:
-          data?.header_tagline_font_size ??
-          fallbackHeader.header_tagline_font_size,
-        header_menu_font_size:
-          data?.header_menu_font_size ?? fallbackHeader.header_menu_font_size,
-        header_menu_gap:
-          data?.header_menu_gap ?? fallbackHeader.header_menu_gap,
+        header_logo_url: data?.header_logo_url ?? fallbackHeader.header_logo_url,
+        header_site_name: data?.header_site_name ?? fallbackHeader.header_site_name,
+        header_tagline: data?.header_tagline ?? fallbackHeader.header_tagline,
+        header_logo_height: data?.header_logo_height ?? fallbackHeader.header_logo_height,
+        header_site_name_font_size: data?.header_site_name_font_size ?? fallbackHeader.header_site_name_font_size,
+        header_tagline_font_size: data?.header_tagline_font_size ?? fallbackHeader.header_tagline_font_size,
+        header_menu_font_size: data?.header_menu_font_size ?? fallbackHeader.header_menu_font_size,
+        header_menu_gap: data?.header_menu_gap ?? fallbackHeader.header_menu_gap,
       });
+    }
+
+    async function loadMenuItems() {
+      const { data, error } = await supabase
+        .from("site_menu_items")
+        .select("id, menu_key, label, href, is_visible, sort_order, is_button, is_admin_only")
+        .eq("is_visible", true)
+        .eq("is_admin_only", false)
+        .order("sort_order", { ascending: true });
+
+      if (!mounted) return;
+
+      if (error) {
+        console.error("Failed to load site_menu_items:", error);
+        setPublicNavItems(fallbackPublicNav.filter((item) => item.is_visible !== false));
+        return;
+      }
+
+      const safeItems = ((data || []) as MenuItem[]).filter((item) => item.href && item.label);
+      setPublicNavItems(safeItems.length ? safeItems : fallbackPublicNav.filter((item) => item.is_visible !== false));
     }
 
     async function loadAuthState() {
@@ -111,45 +113,9 @@ export default function SiteHeader() {
       setLoadingAuth(false);
     }
 
-    async function loadPageVisibility() {
-      const { data, error } = await supabase
-        .from("site_page_settings")
-        .select("page_key, title, is_visible, show_in_menu")
-        .eq("is_visible", true)
-        .eq("show_in_menu", true);
-
-      if (error || !data || data.length === 0) {
-        if (error) {
-          console.error("Failed to load site_page_settings:", error);
-        }
-        return;
-      }
-
-      if (!mounted) return;
-
-      const publicOnly = (data as SitePageSetting[])
-        .filter(
-          (row) =>
-            row.page_key !== "register_team" &&
-            row.page_key !== "register_player"
-        )
-        .map((row) => ({
-          name:
-            row.title ||
-            row.page_key
-              .replace(/_/g, " ")
-              .replace(/\b\w/g, (c) => c.toUpperCase()),
-          href: mapPageKeyToHref(row.page_key),
-        }));
-
-      if (publicOnly.length > 0) {
-        setPublicNavItems(publicOnly);
-      }
-    }
-
     loadHeaderSettings();
+    loadMenuItems();
     loadAuthState();
-    loadPageVisibility();
 
     const {
       data: { subscription },
@@ -160,10 +126,7 @@ export default function SiteHeader() {
     });
 
     function handleOutsideClick(event: MouseEvent) {
-      if (
-        registerRef.current &&
-        !registerRef.current.contains(event.target as Node)
-      ) {
+      if (registerRef.current && !registerRef.current.contains(event.target as Node)) {
         setRegisterOpen(false);
       }
     }
@@ -177,29 +140,14 @@ export default function SiteHeader() {
     };
   }, []);
 
-  const siteName =
-    headerSettings.header_site_name || fallbackHeader.header_site_name;
-  const tagline =
-    headerSettings.header_tagline || fallbackHeader.header_tagline;
-  const logoUrl =
-    headerSettings.header_logo_url || fallbackHeader.header_logo_url;
-  const logoHeight =
-    headerSettings.header_logo_height || fallbackHeader.header_logo_height;
-
-  const siteNameSize =
-    headerSettings.header_site_name_font_size ||
-    fallbackHeader.header_site_name_font_size;
-
-  const taglineSize =
-    headerSettings.header_tagline_font_size ||
-    fallbackHeader.header_tagline_font_size;
-
-  const menuFontSize =
-    headerSettings.header_menu_font_size ||
-    fallbackHeader.header_menu_font_size;
-
-  const menuGap =
-    headerSettings.header_menu_gap || fallbackHeader.header_menu_gap;
+  const siteName = headerSettings.header_site_name || fallbackHeader.header_site_name;
+  const tagline = headerSettings.header_tagline || fallbackHeader.header_tagline;
+  const logoUrl = headerSettings.header_logo_url || fallbackHeader.header_logo_url;
+  const logoHeight = headerSettings.header_logo_height || fallbackHeader.header_logo_height;
+  const siteNameSize = headerSettings.header_site_name_font_size || fallbackHeader.header_site_name_font_size;
+  const taglineSize = headerSettings.header_tagline_font_size || fallbackHeader.header_tagline_font_size;
+  const menuFontSize = headerSettings.header_menu_font_size || fallbackHeader.header_menu_font_size;
+  const menuGap = headerSettings.header_menu_gap || fallbackHeader.header_menu_gap;
 
   async function handleLogout() {
     await supabase.auth.signOut();
@@ -216,47 +164,39 @@ export default function SiteHeader() {
                 src={logoUrl}
                 alt={siteName || "Site logo"}
                 className="shrink-0 object-contain"
-                style={{
-                  height: `clamp(46px, 7vw, ${logoHeight}px)`,
-                  width: "auto",
-                }}
+                style={{ height: `clamp(46px, 7vw, ${logoHeight}px)`, width: "auto" }}
               />
             ) : null}
 
             <div className="min-w-0">
               <p
                 className="truncate font-semibold uppercase text-emerald-700"
-                style={{
-                  fontSize: `clamp(12px, 1.8vw, ${siteNameSize}px)`,
-                  letterSpacing: "0.18em",
-                }}
+                style={{ fontSize: `clamp(12px, 1.8vw, ${siteNameSize}px)`, letterSpacing: "0.18em" }}
               >
                 {siteName}
               </p>
               <h1
                 className="truncate font-bold text-slate-900"
-                style={{
-                  fontSize: `clamp(11px, 1.9vw, ${taglineSize}px)`,
-                  lineHeight: 1.2,
-                }}
+                style={{ fontSize: `clamp(11px, 1.9vw, ${taglineSize}px)`, lineHeight: 1.2 }}
               >
                 {tagline}
               </h1>
             </div>
           </a>
 
-          <nav
-            className="hidden items-center xl:flex"
-            style={{ gap: `${menuGap}px` }}
-          >
+          <nav className="hidden items-center xl:flex" style={{ gap: `${menuGap}px` }}>
             {publicNavItems.map((item) => (
               <a
-                key={item.name}
+                key={item.menu_key || item.href}
                 href={item.href}
-                className="whitespace-nowrap font-medium text-slate-700 transition hover:text-emerald-700"
+                className={
+                  item.is_button
+                    ? "whitespace-nowrap rounded-xl bg-slate-900 px-4 py-2 font-semibold text-white transition hover:bg-slate-800"
+                    : "whitespace-nowrap font-medium text-slate-700 transition hover:text-emerald-700"
+                }
                 style={{ fontSize: `${menuFontSize}px` }}
               >
-                {item.name}
+                {item.label}
               </a>
             ))}
 
@@ -275,42 +215,26 @@ export default function SiteHeader() {
 
                     {registerOpen ? (
                       <div className="absolute right-0 top-full mt-2 w-48 rounded-2xl border border-slate-200 bg-white p-2 shadow-lg">
-                        <a
-                          href="/register/team"
-                          className="block rounded-xl px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-emerald-700"
-                        >
+                        <a href="/register/team" className="block rounded-xl px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-emerald-700">
                           Register Team
                         </a>
-                        <a
-                          href="/register/player"
-                          className="block rounded-xl px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-emerald-700"
-                        >
+                        <a href="/register/player" className="block rounded-xl px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-emerald-700">
                           Register Player
                         </a>
                       </div>
                     ) : null}
                   </div>
 
-                  <a
-                    href="/dashboard"
-                    className="whitespace-nowrap rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
-                  >
+                  <a href="/dashboard" className="whitespace-nowrap rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800">
                     My Dashboard
                   </a>
 
-                  <button
-                    type="button"
-                    onClick={handleLogout}
-                    className="whitespace-nowrap rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-                  >
+                  <button type="button" onClick={handleLogout} className="whitespace-nowrap rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
                     Logout
                   </button>
                 </>
               ) : (
-                <a
-                  href="/login?next=/dashboard"
-                  className="whitespace-nowrap rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
-                >
+                <a href="/login?next=/dashboard" className="whitespace-nowrap rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800">
                   Login / Join
                 </a>
               ))}
@@ -330,11 +254,15 @@ export default function SiteHeader() {
             <div className="flex flex-col gap-2">
               {publicNavItems.map((item) => (
                 <a
-                  key={item.name}
+                  key={item.menu_key || item.href}
                   href={item.href}
-                  className="rounded-xl px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-emerald-700"
+                  className={
+                    item.is_button
+                      ? "rounded-xl bg-slate-900 px-3 py-2 text-sm font-semibold text-white"
+                      : "rounded-xl px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-emerald-700"
+                  }
                 >
-                  {item.name}
+                  {item.label}
                 </a>
               ))}
 
@@ -342,43 +270,25 @@ export default function SiteHeader() {
                 (isLoggedIn ? (
                   <>
                     <div className="mt-2 rounded-2xl border border-slate-200 p-2">
-                      <p className="px-2 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-                        Register
-                      </p>
-                      <a
-                        href="/register/team"
-                        className="block rounded-xl px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-emerald-700"
-                      >
+                      <p className="px-2 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Register</p>
+                      <a href="/register/team" className="block rounded-xl px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-emerald-700">
                         Register Team
                       </a>
-                      <a
-                        href="/register/player"
-                        className="block rounded-xl px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-emerald-700"
-                      >
+                      <a href="/register/player" className="block rounded-xl px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-emerald-700">
                         Register Player
                       </a>
                     </div>
 
-                    <a
-                      href="/dashboard"
-                      className="rounded-xl px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-emerald-700"
-                    >
+                    <a href="/dashboard" className="rounded-xl px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-emerald-700">
                       My Dashboard
                     </a>
 
-                    <button
-                      type="button"
-                      onClick={handleLogout}
-                      className="rounded-xl px-3 py-2 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-emerald-700"
-                    >
+                    <button type="button" onClick={handleLogout} className="rounded-xl px-3 py-2 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-emerald-700">
                       Logout
                     </button>
                   </>
                 ) : (
-                  <a
-                    href="/login?next=/dashboard"
-                    className="rounded-xl px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-emerald-700"
-                  >
+                  <a href="/login?next=/dashboard" className="rounded-xl px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-emerald-700">
                     Login / Join
                   </a>
                 ))}

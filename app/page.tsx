@@ -218,6 +218,15 @@ type HomepageCommunityCard = {
   is_active: boolean | null;
 };
 
+type SitePageBlock = {
+  id: string;
+  page_key: string;
+  block_key: string;
+  block_title: string;
+  is_visible: boolean | null;
+  sort_order: number | null;
+};
+
 const fallbackTournament: TournamentRow = {
   id: "fallback-home",
   title: "Premium Cricket Platform",
@@ -287,6 +296,24 @@ const fallbackHomepageSettings: HomepageSettingsRow = {
   players_watch_order: 4,
   quick_links_order: 6,
 };
+
+const fallbackHomeBlocks: Record<string, { is_visible: boolean; sort_order: number }> = {
+  hero: { is_visible: true, sort_order: 1 },
+  featured_tournament: { is_visible: true, sort_order: 2 },
+  match_center: { is_visible: true, sort_order: 3 },
+  rankings: { is_visible: true, sort_order: 4 },
+  players_watch: { is_visible: true, sort_order: 5 },
+  community: { is_visible: true, sort_order: 6 },
+  quick_links: { is_visible: true, sort_order: 7 },
+  news: { is_visible: true, sort_order: 8 },
+};
+
+function makeBlockMap(rows: SitePageBlock[]) {
+  return rows.reduce<Record<string, SitePageBlock>>((acc, row) => {
+    acc[row.block_key] = row;
+    return acc;
+  }, {});
+}
 
 function getTeam(row: TeamRankingRow): TeamInfo | null {
   if (!row.teams) return null;
@@ -403,6 +430,7 @@ export default function HomePage() {
   const [playersWatch, setPlayersWatch] = useState<HomepagePlayerWatch[]>([]);
   const [quickLinks, setQuickLinks] = useState<HomepageQuickLink[]>([]);
   const [communityCards, setCommunityCards] = useState<HomepageCommunityCard[]>([]);
+  const [homeBlocks, setHomeBlocks] = useState<Record<string, SitePageBlock>>({});
   const [tournamentTeams, setTournamentTeams] = useState<TeamInfo[]>([]);
   const [teamRankings, setTeamRankings] = useState<TeamRankingRow[]>([]);
   const [playerRankings, setPlayerRankings] = useState<PlayerRankingRow[]>([]);
@@ -464,6 +492,22 @@ export default function HomePage() {
     } else {
       setHomepageSettings(fallbackHomepageSettings);
     }
+  }
+
+  async function loadHomeBlocks() {
+    const { data, error } = await supabase
+      .from("site_page_blocks")
+      .select("*")
+      .eq("page_key", "home")
+      .order("sort_order", { ascending: true });
+
+    if (error) {
+      console.error(error);
+      setHomeBlocks({});
+      return;
+    }
+
+    setHomeBlocks(makeBlockMap((data || []) as SitePageBlock[]));
   }
 
   async function loadPhaseContent() {
@@ -699,7 +743,7 @@ export default function HomePage() {
       .eq("is_active", true)
       .order("sort_order", { ascending: true })
       .order("rank_position", { ascending: true })
-      .limit(3);
+      .limit(5);
 
     if (error) {
       console.error(error);
@@ -713,6 +757,7 @@ export default function HomePage() {
   useEffect(() => {
     loadTournaments();
     loadHomepageSettings();
+    loadHomeBlocks();
     loadPhaseContent();
     loadCommunityCards();
     loadTeamRankings();
@@ -808,15 +853,29 @@ export default function HomePage() {
     latestNews
   );
 
+  const isBlockVisible = (blockKey: string, fallback = true) => {
+    const block = homeBlocks[blockKey];
+    if (!block) return fallbackHomeBlocks[blockKey]?.is_visible ?? fallback;
+    return block.is_visible !== false;
+  };
+
+  const blockOrder = (blockKey: string, fallback: number) => {
+    const block = homeBlocks[blockKey];
+    return block?.sort_order ?? fallbackHomeBlocks[blockKey]?.sort_order ?? fallback;
+  };
+
+  const showFeaturedTournamentBlock = isBlockVisible("featured_tournament");
+  const showMatchCenterBlock = isBlockVisible("match_center");
+
   return (
     <main className="min-h-screen bg-[#f4f7fb] text-slate-900">
       <SiteHeader />
 
       <div className="flex flex-col">
-        {homepageSettings.show_hero !== false && (
+        {homepageSettings.show_hero !== false && isBlockVisible("hero") && (
           <section
             className="mx-auto w-full max-w-7xl px-4 py-5 sm:px-6 lg:px-8 lg:py-8"
-            style={{ order: homepageSettings.hero_order ?? 1 }}
+            style={{ order: blockOrder("hero", homepageSettings.hero_order ?? 1) }}
           >
             <div className="grid gap-5 lg:grid-cols-[1.65fr_0.85fr] lg:items-stretch">
               <div className="flex min-h-[560px] flex-col overflow-hidden rounded-[30px] bg-gradient-to-br from-slate-950 via-[#02103a] to-emerald-900 p-6 text-white shadow-2xl sm:p-8 lg:h-[640px] lg:p-7">
@@ -952,10 +1011,10 @@ export default function HomePage() {
           </section>
         )}
 
-        {homepageSettings.show_featured_section !== false && (
+        {homepageSettings.show_featured_section !== false && (showFeaturedTournamentBlock || showMatchCenterBlock) && (
           <section
             className="mx-auto w-full max-w-7xl px-4 pb-8 sm:px-6 lg:px-8 lg:pb-12"
-            style={{ order: homepageSettings.featured_section_order ?? 2 }}
+            style={{ order: Math.min(blockOrder("featured_tournament", homepageSettings.featured_section_order ?? 2), blockOrder("match_center", 3)) }}
           >
             <div className="rounded-[30px] bg-white p-6 shadow-xl ring-1 ring-slate-200 sm:p-6 lg:p-7">
               <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -983,6 +1042,7 @@ export default function HomePage() {
               </div>
 
               <div className="space-y-7">
+                {showFeaturedTournamentBlock && (
                 <div className="rounded-[28px] border border-slate-200 bg-slate-950 p-5 text-white shadow-lg sm:p-6 lg:p-7">
                   <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
                     <div>
@@ -1075,7 +1135,9 @@ export default function HomePage() {
                     </a>
                   </div>
                 </div>
+                )}
 
+                {showMatchCenterBlock && (
                 <div>
                   <div className="mb-4 flex items-end justify-between gap-4">
                     <div>
@@ -1135,15 +1197,16 @@ export default function HomePage() {
                     )}
                   </div>
                 </div>
+                )}
               </div>
             </div>
           </section>
         )}
 
-        {homepageSettings.show_rankings !== false && (
+        {homepageSettings.show_rankings !== false && isBlockVisible("rankings") && (
           <section
             className="mx-auto w-full max-w-7xl px-4 pb-8 sm:px-6 lg:px-8 lg:pb-12"
-            style={{ order: homepageSettings.rankings_order ?? 3 }}
+            style={{ order: blockOrder("rankings", homepageSettings.rankings_order ?? 4) }}
           >
             <div className="grid gap-6 lg:grid-cols-2">
               <div className="rounded-[30px] bg-white p-6 shadow-xl ring-1 ring-slate-200 sm:p-6 lg:p-7">
@@ -1319,10 +1382,10 @@ export default function HomePage() {
           </section>
         )}
 
-        {homepageSettings.show_players_watch !== false && (
+        {homepageSettings.show_players_watch !== false && isBlockVisible("players_watch") && (
           <section
             className="mx-auto w-full max-w-7xl px-4 pb-8 sm:px-6 lg:px-8 lg:pb-12"
-            style={{ order: homepageSettings.players_watch_order ?? 4 }}
+            style={{ order: blockOrder("players_watch", homepageSettings.players_watch_order ?? 5) }}
           >
             <div className="rounded-[30px] bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 p-6 text-white shadow-2xl sm:p-6 lg:p-7">
               <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -1375,9 +1438,10 @@ export default function HomePage() {
           </section>
         )}
 
+        {isBlockVisible("community") && (
         <section
           className="mx-auto w-full max-w-7xl px-4 pb-8 sm:px-6 lg:px-8 lg:pb-12"
-          style={{ order: 5 }}
+          style={{ order: blockOrder("community", 6) }}
         >
           <div className="rounded-[30px] bg-white p-6 shadow-xl ring-1 ring-slate-200 sm:p-6 lg:p-7">
             <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -1445,11 +1509,12 @@ export default function HomePage() {
             </div>
           </div>
         </section>
+        )}
 
-        {homepageSettings.show_quick_links !== false && (
+        {homepageSettings.show_quick_links !== false && isBlockVisible("quick_links") && (
           <section
             className="mx-auto w-full max-w-7xl px-4 pb-10 sm:px-6 lg:px-8 lg:pb-14"
-            style={{ order: homepageSettings.quick_links_order ?? 6 }}
+            style={{ order: blockOrder("quick_links", homepageSettings.quick_links_order ?? 7) }}
           >
             <div className="rounded-[30px] bg-white p-6 shadow-xl ring-1 ring-slate-200 sm:p-6 lg:p-7">
               <div className="mb-6">

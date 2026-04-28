@@ -15,6 +15,21 @@ type AdminModule = {
 };
 
 const adminModules: AdminModule[] = [
+
+  {
+    title: "Menu Control",
+    description: "Show, hide and reorder public header menu items without editing code.",
+    href: "/admin/menu-control",
+    tag: "Platform",
+    group: "Platform Control",
+  },
+  {
+    title: "Page Block Control",
+    description: "Show or hide public page sections such as homepage rankings, match center and player directory.",
+    href: "/admin/page-control",
+    tag: "Platform",
+    group: "Platform Control",
+  },
   {
     title: "Homepage Featured Tournament",
     description: "Select which tournament appears as the main homepage feature.",
@@ -141,6 +156,7 @@ const adminModules: AdminModule[] = [
 ];
 
 const groupOrder = [
+  "Platform Control",
   "Homepage Control",
   "Tournament Control",
   "Match & Ranking",

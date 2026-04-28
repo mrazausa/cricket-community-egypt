@@ -1,206 +1,199 @@
-"use client";
-
-import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
 import SiteFooter from "@/components/layout/site-footer";
 import SiteHeader from "@/components/layout/site-header";
 import { supabase } from "@/utils/supabase/client";
 
-type PlayerRow = {
+type PlayerDirectoryRow = {
   id: string;
-  full_name: string | null;
-  player_code: string | null;
-  player_photo_url: string | null;
-  role: string | null;
-  current_team: string | null;
-  batting_style: string | null;
-  bowling_style: string | null;
-  city_base: string | null;
-  preferred_tournament: string | null;
-  notes: string | null;
-  status: string | null;
-  submitted_by_user_id: string | null;
+  player_name: string;
+  normalized_name: string | null;
+  team_name: string | null;
+  year_label: string | null;
+  matches: number | null;
+  innings: number | null;
+  runs: number | null;
+  wickets: number | null;
+  batting_average: number | null;
+  strike_rate: number | null;
+  economy: number | null;
+  mvp_points: number | null;
+  batting_score: number | null;
+  bowling_score: number | null;
+  all_round_score: number | null;
+  fielding_score: number | null;
+  hybrid_score: number | null;
+  image_url: string | null;
+  bio: string | null;
 };
 
-function getInitial(value?: string | null, fallback = "P") {
-  const text = (value || "").trim();
-  return text ? text.charAt(0).toUpperCase() : fallback;
+function toNumber(value: number | null | undefined) {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
-function formatStatus(status?: string | null) {
-  if (!status) return "Pending";
-  return status
-    .split("_")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
+function initials(name: string) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("") || "P";
 }
 
-function getStatusBadge(status?: string | null) {
-  if (status === "approved") return "bg-emerald-100 text-emerald-700";
-  if (status === "rejected") return "bg-red-100 text-red-700";
-  if (status === "needs_changes") return "bg-amber-100 text-amber-700";
-  return "bg-slate-100 text-slate-700";
+function parseBio(row: PlayerDirectoryRow) {
+  if (!row.bio) return {} as Record<string, any>;
+  try {
+    return JSON.parse(row.bio) as Record<string, any>;
+  } catch {
+    return {} as Record<string, any>;
+  }
 }
 
-export default function PlayerDetailPage() {
-  const params = useParams();
-  const code = String(params?.code || "");
+function unique(values: string[]) {
+  return Array.from(new Set(values.filter(Boolean)));
+}
 
-  const [loading, setLoading] = useState(true);
-  const [player, setPlayer] = useState<PlayerRow | null>(null);
-  const [isOwner, setIsOwner] = useState(false);
+export default async function PlayerDetailPage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
 
-  useEffect(() => {
-    loadPage();
-  }, [code]);
+  const { data, error } = await supabase
+    .from("player_directory_csv")
+    .select("*")
+    .eq("normalized_name", decodeURIComponent(slug))
+    .eq("show_on_public", true)
+    .eq("is_active", true)
+    .order("year_label", { ascending: false });
 
-  async function loadPage() {
-    setLoading(true);
+  const rows = ((data || []) as PlayerDirectoryRow[]).filter(Boolean);
+  const first = rows[0];
 
-    const { data: playerRes, error: playerError } = await supabase
-      .from("registration_players")
-      .select("*")
-      .eq("player_code", code)
-      .maybeSingle();
+  const totals = rows.reduce(
+    (acc, row) => ({
+      matches: acc.matches + toNumber(row.matches),
+      innings: acc.innings + toNumber(row.innings),
+      runs: acc.runs + toNumber(row.runs),
+      wickets: acc.wickets + toNumber(row.wickets),
+      mvpPoints: acc.mvpPoints + toNumber(row.mvp_points),
+      hybridScore: acc.hybridScore + toNumber(row.hybrid_score),
+    }),
+    { matches: 0, innings: 0, runs: 0, wickets: 0, mvpPoints: 0, hybridScore: 0 }
+  );
 
-    if (playerError || !playerRes) {
-      setPlayer(null);
-      setLoading(false);
-      return;
-    }
-
-    const { data: userRes } = await supabase.auth.getUser();
-    const currentUserId = userRes.user?.id || "";
-
-    setPlayer(playerRes as PlayerRow);
-    setIsOwner(!!currentUserId && currentUserId === playerRes.submitted_by_user_id);
-    setLoading(false);
-  }
-
-  if (loading) {
-    return (
-      <main className="min-h-screen bg-[#f5f7fb] text-slate-900">
-        <SiteHeader />
-        <section className="mx-auto max-w-5xl px-4 py-12">
-          <div className="rounded-3xl bg-white p-6 shadow-md ring-1 ring-slate-200">
-            Loading player page...
-          </div>
-        </section>
-        <SiteFooter />
-      </main>
-    );
-  }
-
-  if (!player) {
-    return (
-      <main className="min-h-screen bg-[#f5f7fb] text-slate-900">
-        <SiteHeader />
-        <section className="mx-auto max-w-5xl px-4 py-12">
-          <div className="rounded-3xl bg-white p-6 shadow-md ring-1 ring-slate-200">
-            Player not found.
-          </div>
-        </section>
-        <SiteFooter />
-      </main>
-    );
-  }
+  const teams = unique(rows.map((row) => row.team_name || ""));
+  const years = unique(rows.map((row) => row.year_label || "")).sort();
+  const image = first?.image_url || null;
+  const playerName = first?.player_name || "Player";
 
   return (
     <main className="min-h-screen bg-[#f5f7fb] text-slate-900">
       <SiteHeader />
 
-      <section className="mx-auto max-w-5xl px-4 py-8 lg:py-12">
-        <div className="rounded-3xl bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-900 p-6 text-white shadow-xl sm:p-8">
-          <div className="flex flex-col gap-6 sm:flex-row sm:items-center">
-            {player.player_photo_url ? (
-              <img
-                src={player.player_photo_url}
-                alt={player.full_name || "Player"}
-                className="h-28 w-28 rounded-3xl object-cover ring-2 ring-white/20"
-              />
-            ) : (
-              <div className="flex h-28 w-28 items-center justify-center rounded-3xl bg-white/10 text-4xl font-bold text-white ring-2 ring-white/20">
-                {getInitial(player.full_name, "P")}
-              </div>
-            )}
+      <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 lg:py-12">
+        <div className="overflow-hidden rounded-3xl bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-900 p-6 text-white shadow-xl sm:p-8">
+          <a href="/players" className="mb-5 inline-flex rounded-full bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-emerald-200 transition hover:bg-white/15">
+            ← Players Directory
+          </a>
 
-            <div className="min-w-0 flex-1">
-              <p className="mb-2 inline-flex rounded-full bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-emerald-200">
-                Player Page
-              </p>
-              <h1 className="text-3xl font-bold sm:text-5xl">
-                {player.full_name || "Unnamed Player"}
-              </h1>
-
-              <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-slate-200">
-                {player.player_code ? (
-                  <span className="rounded-full bg-white/10 px-3 py-1 font-semibold">
-                    {player.player_code}
-                  </span>
-                ) : null}
-                <span className={`rounded-full px-3 py-1 font-semibold ${getStatusBadge(player.status)}`}>
-                  {formatStatus(player.status)}
-                </span>
-                {player.role ? (
-                  <span className="rounded-full bg-white/10 px-3 py-1">
-                    {player.role}
-                  </span>
-                ) : null}
+          {error || rows.length === 0 ? (
+            <div>
+              <h1 className="text-3xl font-bold sm:text-5xl">Player not found</h1>
+              <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-200">This CSV-based player profile is not available yet.</p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+              <div className="flex items-center gap-5">
+                {image ? (
+                  <img src={image} alt={playerName} className="h-24 w-24 rounded-3xl object-cover ring-2 ring-white/20" />
+                ) : (
+                  <div className="flex h-24 w-24 items-center justify-center rounded-3xl bg-white/10 text-3xl font-black text-white ring-1 ring-white/15">
+                    {initials(playerName)}
+                  </div>
+                )}
+                <div>
+                  <p className="mb-3 inline-flex rounded-full bg-emerald-400/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.2em] text-emerald-200">
+                    Player Profile
+                  </p>
+                  <h1 className="text-3xl font-black leading-tight sm:text-5xl">{playerName}</h1>
+                  <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-200">
+                    Teams: {teams.join(", ") || "-"} • Years: {years.join(", ") || "-"}
+                  </p>
+                </div>
               </div>
             </div>
-
-            {isOwner ? (
-              <a
-                href={`/register/player?id=${player.id}`}
-                className="inline-flex rounded-2xl bg-white px-5 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-100"
-              >
-                Edit Player
-              </a>
-            ) : null}
-          </div>
+          )}
         </div>
       </section>
 
-      <section className="mx-auto max-w-5xl px-4 pb-8">
-        <div className="grid gap-6 lg:grid-cols-3">
-          <div className="rounded-3xl bg-white p-6 shadow-md ring-1 ring-slate-200 lg:col-span-2">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700">
-              Player Details
-            </p>
-            <h2 className="mt-3 text-2xl font-bold">Overview</h2>
-
-            <div className="mt-5 grid gap-4 sm:grid-cols-2 text-sm text-slate-600">
-              <p><span className="font-semibold text-slate-900">Role:</span> {player.role || "Not set"}</p>
-              <p><span className="font-semibold text-slate-900">Current Team:</span> {player.current_team || "Not set"}</p>
-              <p><span className="font-semibold text-slate-900">Batting Style:</span> {player.batting_style || "Not set"}</p>
-              <p><span className="font-semibold text-slate-900">Bowling Style:</span> {player.bowling_style || "Not set"}</p>
-              <p><span className="font-semibold text-slate-900">City / Base:</span> {player.city_base || "Not set"}</p>
-              <p><span className="font-semibold text-slate-900">Preferred Tournament:</span> {player.preferred_tournament || "Not set"}</p>
+      {rows.length > 0 ? (
+        <>
+          <section className="mx-auto max-w-7xl px-4 pb-6 sm:px-6 lg:px-8">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
+              <StatCard label="Matches" value={totals.matches} />
+              <StatCard label="Runs" value={totals.runs} />
+              <StatCard label="Wickets" value={totals.wickets} />
+              <StatCard label="MVP Points" value={totals.mvpPoints.toFixed(1)} />
+              <StatCard label="Hybrid" value={totals.hybridScore.toFixed(1)} />
+              <StatCard label="Teams" value={teams.length} />
             </div>
+          </section>
 
-            {player.notes ? (
-              <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
-                {player.notes}
+          <section className="mx-auto max-w-7xl px-4 pb-12 sm:px-6 lg:px-8">
+            <div className="overflow-hidden rounded-3xl bg-white shadow-md ring-1 ring-slate-200">
+              <div className="border-b border-slate-200 bg-slate-50/80 p-5">
+                <p className="text-xs font-bold uppercase tracking-[0.22em] text-emerald-700">Year-wise History</p>
+                <h2 className="mt-1 text-2xl font-black text-slate-950">Performance by team and year</h2>
               </div>
-            ) : null}
-          </div>
 
-          <div className="rounded-3xl bg-white p-6 shadow-md ring-1 ring-slate-200">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700">
-              Quick Info
-            </p>
-            <h2 className="mt-3 text-2xl font-bold">Snapshot</h2>
-
-            <div className="mt-4 space-y-3 text-sm text-slate-600">
-              <p><span className="font-semibold text-slate-900">Player ID:</span> {player.player_code || "Not generated"}</p>
-              <p><span className="font-semibold text-slate-900">Status:</span> {formatStatus(player.status)}</p>
-              <p><span className="font-semibold text-slate-900">Current Team:</span> {player.current_team || "Not set"}</p>
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-white text-left text-xs uppercase tracking-[0.14em] text-slate-500">
+                    <tr>
+                      <th className="px-4 py-3">Year</th>
+                      <th className="px-4 py-3">Team</th>
+                      <th className="px-4 py-3">M</th>
+                      <th className="px-4 py-3">Runs</th>
+                      <th className="px-4 py-3">Avg</th>
+                      <th className="px-4 py-3">SR</th>
+                      <th className="px-4 py-3">Wkts</th>
+                      <th className="px-4 py-3">Eco</th>
+                      <th className="px-4 py-3">MVP</th>
+                      <th className="px-4 py-3">Tournament</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {rows.map((row) => {
+                      const bio = parseBio(row);
+                      return (
+                        <tr key={row.id} className="hover:bg-slate-50">
+                          <td className="px-4 py-4 font-bold text-slate-950">{row.year_label || "-"}</td>
+                          <td className="px-4 py-4 font-semibold">{row.team_name || "-"}</td>
+                          <td className="px-4 py-4">{row.matches ?? 0}</td>
+                          <td className="px-4 py-4">{row.runs ?? 0}</td>
+                          <td className="px-4 py-4">{row.batting_average ?? 0}</td>
+                          <td className="px-4 py-4">{row.strike_rate ?? 0}</td>
+                          <td className="px-4 py-4">{row.wickets ?? 0}</td>
+                          <td className="px-4 py-4">{row.economy ?? 0}</td>
+                          <td className="px-4 py-4 font-bold text-emerald-700">{row.mvp_points ?? 0}</td>
+                          <td className="px-4 py-4 text-slate-600">{bio.Tournaments || bio.tournaments || "-"}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
-        </div>
-      </section>
+          </section>
+        </>
+      ) : null}
 
       <SiteFooter />
     </main>
+  );
+}
+
+function StatCard({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="rounded-3xl bg-white p-5 shadow-md ring-1 ring-slate-200">
+      <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">{label}</p>
+      <p className="mt-2 text-2xl font-black text-slate-950">{value}</p>
+    </div>
   );
 }
