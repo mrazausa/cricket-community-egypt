@@ -12,7 +12,7 @@ export async function generateMetadata(): Promise<Metadata> {
       siteName: "Cricket Community Egypt",
       images: [
         {
-          url: "https://gcboqehagqylcnywrlpb.supabase.co/storage/v1/object/public/tournament-assets/logos/azhar-cricket-trophy-2026-1776002681930.png",
+          url: "https://gcboqehagqylcnywrlpb.supabase.co/storage/v1/object/public/og/azhar-cricket-trophy-2026-og.jpg",
           width: 1200,
           height: 630,
           alt: "Azhar Cricket Trophy 2026",
@@ -25,7 +25,7 @@ export async function generateMetadata(): Promise<Metadata> {
       title: "Azhar Cricket Trophy 2026",
       description: "Fixtures, standings, teams, players and top performers.",
       images: [
-        "https://gcboqehagqylcnywrlpb.supabase.co/storage/v1/object/public/tournament-assets/logos/azhar-cricket-trophy-2026-1776002681930.png",
+        "https://gcboqehagqylcnywrlpb.supabase.co/storage/v1/object/public/og/azhar-cricket-trophy-2026-og.jpg",
       ],
     },
   };
