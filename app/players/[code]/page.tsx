@@ -30,12 +30,27 @@ function toNumber(value: number | null | undefined) {
 }
 
 function initials(name: string) {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join("") || "P";
+  return (
+    name
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase())
+      .join("") || "P"
+  );
+}
+
+function slugify(value: string | null | undefined) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function rowCode(row: PlayerDirectoryRow) {
+  return slugify(row.normalized_name || row.player_name);
 }
 
 function parseBio(row: PlayerDirectoryRow) {
@@ -51,18 +66,26 @@ function unique(values: string[]) {
   return Array.from(new Set(values.filter(Boolean)));
 }
 
-export default async function PlayerDetailPage({ params }: { params: Promise<{ slug: string }> }) {
-  const { slug } = await params;
+function formatNumber(value: number | null | undefined, digits = 0) {
+  const num = toNumber(value);
+  if (digits === 0) return Math.round(num).toString();
+  return num.toFixed(digits).replace(/\.0+$/, "");
+}
+
+export default async function PlayerDetailPage({ params }: { params: Promise<{ code: string }> }) {
+  const { code } = await params;
+  const requestedCode = decodeURIComponent(code || "").trim().toLowerCase();
 
   const { data, error } = await supabase
     .from("player_directory_csv")
     .select("*")
-    .eq("normalized_name", decodeURIComponent(slug))
     .eq("show_on_public", true)
     .eq("is_active", true)
-    .order("year_label", { ascending: false });
+    .order("year_label", { ascending: false })
+    .order("team_name", { ascending: true });
 
-  const rows = ((data || []) as PlayerDirectoryRow[]).filter(Boolean);
+  const allRows = ((data || []) as PlayerDirectoryRow[]).filter((row) => row.player_name);
+  const rows = allRows.filter((row) => rowCode(row) === requestedCode);
   const first = rows[0];
 
   const totals = rows.reduce(
@@ -72,15 +95,21 @@ export default async function PlayerDetailPage({ params }: { params: Promise<{ s
       runs: acc.runs + toNumber(row.runs),
       wickets: acc.wickets + toNumber(row.wickets),
       mvpPoints: acc.mvpPoints + toNumber(row.mvp_points),
+      battingScore: acc.battingScore + toNumber(row.batting_score),
+      bowlingScore: acc.bowlingScore + toNumber(row.bowling_score),
+      allRoundScore: acc.allRoundScore + toNumber(row.all_round_score),
+      fieldingScore: acc.fieldingScore + toNumber(row.fielding_score),
       hybridScore: acc.hybridScore + toNumber(row.hybrid_score),
     }),
-    { matches: 0, innings: 0, runs: 0, wickets: 0, mvpPoints: 0, hybridScore: 0 }
+    { matches: 0, innings: 0, runs: 0, wickets: 0, mvpPoints: 0, battingScore: 0, bowlingScore: 0, allRoundScore: 0, fieldingScore: 0, hybridScore: 0 }
   );
 
   const teams = unique(rows.map((row) => row.team_name || ""));
   const years = unique(rows.map((row) => row.year_label || "")).sort();
   const image = first?.image_url || null;
   const playerName = first?.player_name || "Player";
+  const bestBatting = rows.length ? Math.max(...rows.map((row) => toNumber(row.batting_score))) : 0;
+  const bestBowling = rows.length ? Math.max(...rows.map((row) => toNumber(row.bowling_score))) : 0;
 
   return (
     <main className="min-h-screen bg-[#f5f7fb] text-slate-900">
@@ -95,11 +124,13 @@ export default async function PlayerDetailPage({ params }: { params: Promise<{ s
           {error || rows.length === 0 ? (
             <div>
               <h1 className="text-3xl font-bold sm:text-5xl">Player not found</h1>
-              <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-200">This CSV-based player profile is not available yet.</p>
+              <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-200">
+                This CSV-based player profile is not available yet. The profile code may not match the imported CSV player name.
+              </p>
             </div>
           ) : (
             <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-              <div className="flex items-center gap-5">
+              <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
                 {image ? (
                   <img src={image} alt={playerName} className="h-24 w-24 rounded-3xl object-cover ring-2 ring-white/20" />
                 ) : (
@@ -109,7 +140,7 @@ export default async function PlayerDetailPage({ params }: { params: Promise<{ s
                 )}
                 <div>
                   <p className="mb-3 inline-flex rounded-full bg-emerald-400/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.2em] text-emerald-200">
-                    Player Profile
+                    Player Correspondence Page
                   </p>
                   <h1 className="text-3xl font-black leading-tight sm:text-5xl">{playerName}</h1>
                   <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-200">
@@ -129,9 +160,16 @@ export default async function PlayerDetailPage({ params }: { params: Promise<{ s
               <StatCard label="Matches" value={totals.matches} />
               <StatCard label="Runs" value={totals.runs} />
               <StatCard label="Wickets" value={totals.wickets} />
-              <StatCard label="MVP Points" value={totals.mvpPoints.toFixed(1)} />
-              <StatCard label="Hybrid" value={totals.hybridScore.toFixed(1)} />
+              <StatCard label="MVP Points" value={formatNumber(totals.mvpPoints, 1)} />
+              <StatCard label="Hybrid" value={formatNumber(totals.hybridScore, 1)} />
               <StatCard label="Teams" value={teams.length} />
+            </div>
+          </section>
+
+          <section className="mx-auto max-w-7xl px-4 pb-6 sm:px-6 lg:px-8">
+            <div className="grid gap-4 lg:grid-cols-2">
+              <InfoCard title="Team History" value={teams.join(", ") || "-"} helper="Player may appear under multiple teams when the CSV has year-wise team movement." />
+              <InfoCard title="Performance Profile" value={`Best Batting Score ${formatNumber(bestBatting, 1)} • Best Bowling Score ${formatNumber(bestBowling, 1)}`} helper="Scores are imported from the consolidated CCE yearly performance CSV." />
             </div>
           </section>
 
@@ -149,12 +187,15 @@ export default async function PlayerDetailPage({ params }: { params: Promise<{ s
                       <th className="px-4 py-3">Year</th>
                       <th className="px-4 py-3">Team</th>
                       <th className="px-4 py-3">M</th>
+                      <th className="px-4 py-3">Inn</th>
                       <th className="px-4 py-3">Runs</th>
                       <th className="px-4 py-3">Avg</th>
                       <th className="px-4 py-3">SR</th>
                       <th className="px-4 py-3">Wkts</th>
                       <th className="px-4 py-3">Eco</th>
                       <th className="px-4 py-3">MVP</th>
+                      <th className="px-4 py-3">Bat Score</th>
+                      <th className="px-4 py-3">Bowl Score</th>
                       <th className="px-4 py-3">Tournament</th>
                     </tr>
                   </thead>
@@ -166,13 +207,16 @@ export default async function PlayerDetailPage({ params }: { params: Promise<{ s
                           <td className="px-4 py-4 font-bold text-slate-950">{row.year_label || "-"}</td>
                           <td className="px-4 py-4 font-semibold">{row.team_name || "-"}</td>
                           <td className="px-4 py-4">{row.matches ?? 0}</td>
+                          <td className="px-4 py-4">{row.innings ?? 0}</td>
                           <td className="px-4 py-4">{row.runs ?? 0}</td>
-                          <td className="px-4 py-4">{row.batting_average ?? 0}</td>
-                          <td className="px-4 py-4">{row.strike_rate ?? 0}</td>
+                          <td className="px-4 py-4">{formatNumber(row.batting_average, 2)}</td>
+                          <td className="px-4 py-4">{formatNumber(row.strike_rate, 1)}</td>
                           <td className="px-4 py-4">{row.wickets ?? 0}</td>
-                          <td className="px-4 py-4">{row.economy ?? 0}</td>
-                          <td className="px-4 py-4 font-bold text-emerald-700">{row.mvp_points ?? 0}</td>
-                          <td className="px-4 py-4 text-slate-600">{bio.Tournaments || bio.tournaments || "-"}</td>
+                          <td className="px-4 py-4">{formatNumber(row.economy, 2)}</td>
+                          <td className="px-4 py-4 font-bold text-emerald-700">{formatNumber(row.mvp_points, 1)}</td>
+                          <td className="px-4 py-4">{formatNumber(row.batting_score, 1)}</td>
+                          <td className="px-4 py-4">{formatNumber(row.bowling_score, 1)}</td>
+                          <td className="px-4 py-4 text-slate-600">{bio.Tournaments || bio.tournaments || bio.tournament || "-"}</td>
                         </tr>
                       );
                     })}
@@ -194,6 +238,16 @@ function StatCard({ label, value }: { label: string; value: string | number }) {
     <div className="rounded-3xl bg-white p-5 shadow-md ring-1 ring-slate-200">
       <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">{label}</p>
       <p className="mt-2 text-2xl font-black text-slate-950">{value}</p>
+    </div>
+  );
+}
+
+function InfoCard({ title, value, helper }: { title: string; value: string; helper: string }) {
+  return (
+    <div className="rounded-3xl bg-white p-5 shadow-md ring-1 ring-slate-200">
+      <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">{title}</p>
+      <p className="mt-2 text-lg font-black text-slate-950">{value}</p>
+      <p className="mt-2 text-sm leading-6 text-slate-600">{helper}</p>
     </div>
   );
 }
