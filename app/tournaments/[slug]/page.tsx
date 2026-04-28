@@ -12,7 +12,7 @@ export async function generateMetadata(): Promise<Metadata> {
       siteName: "Cricket Community Egypt",
       images: [
         {
-          url: "https://gcboqehagqylcnywrlpb.supabase.co/storage/v1/object/public/tournament-assets/azhar-2026-logo-transparent.png",
+          url: "https://gcboqehagqylcnywrlpb.supabase.co/storage/v1/object/public/tournament-assets/logos/azhar-cricket-trophy-2026-1776002681930.png",
           width: 1200,
           height: 630,
           alt: "Azhar Cricket Trophy 2026",
@@ -25,7 +25,7 @@ export async function generateMetadata(): Promise<Metadata> {
       title: "Azhar Cricket Trophy 2026",
       description: "Fixtures, standings, teams, players and top performers.",
       images: [
-        "https://gcboqehagqylcnywrlpb.supabase.co/storage/v1/object/public/tournament-assets/azhar-2026-logo-transparent.png",
+        "https://gcboqehagqylcnywrlpb.supabase.co/storage/v1/object/public/tournament-assets/logos/azhar-cricket-trophy-2026-1776002681930.png",
       ],
     },
   };
@@ -34,3 +34,4 @@ export async function generateMetadata(): Promise<Metadata> {
 export default function Page() {
   return <TournamentClient />;
 }
+
