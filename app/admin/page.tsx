@@ -92,8 +92,8 @@ const adminModules: AdminModule[] = [
     title: "Player Rankings",
     description: "Manage top batsmen, bowlers, MVPs and player ranking data.",
     href: "/admin/player-rankings",
-    tag: "Rankings",
-    group: "Match & Ranking",
+    tag: "Players",
+    group: "Player Control",
   },
   {
     title: "Ranking IDs",
@@ -111,11 +111,19 @@ const adminModules: AdminModule[] = [
   },
 
   {
+    title: "Player Directory Import",
+    description: "Upload CCE yearly player performance CSV and build the public player directory with team-wise profiles.",
+    href: "/admin/player-directory-import",
+    tag: "Players",
+    group: "Player Control",
+  },
+
+  {
     title: "Player Approvals",
     description: "Approve, reject or request changes for player registrations.",
     href: "/admin/player-approvals",
-    tag: "Registration",
-    group: "Registration Control",
+    tag: "Players",
+    group: "Player Control",
   },
   {
     title: "Team Approvals",
@@ -160,6 +168,7 @@ const groupOrder = [
   "Homepage Control",
   "Tournament Control",
   "Match & Ranking",
+  "Player Control",
   "Registration Control",
   "Content Control",
 ];
