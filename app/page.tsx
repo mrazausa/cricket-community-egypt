@@ -110,6 +110,8 @@ type TeamRankingRow = {
   season_label: string | null;
   team_name_override?: string | null;
   team_logo_override_url?: string | null;
+  captain_name?: string | null;
+  captain_photo_url?: string | null;
   teams?: TeamInfo | TeamInfo[] | null;
 };
 
@@ -130,6 +132,10 @@ type PlayerRankingRow = {
   stat_value?: string | null;
   sort_order?: number | null;
   show_on_homepage?: boolean | null;
+  show_as_player_to_watch?: boolean | null;
+  player_watch_message?: string | null;
+  player_watch_tag?: string | null;
+  player_watch_sort_order?: number | null;
   players?: PlayerInfo | PlayerInfo[] | null;
 };
 
@@ -175,6 +181,7 @@ type MatchRow = {
   external_score_url: string | null;
   is_featured_home: boolean | null;
   sort_order: number | null;
+  match_number?: number | null;
 };
 
 type NewsRow = {
@@ -385,6 +392,93 @@ function buildHomepageMatchTitle(
   return title;
 }
 
+
+function findTeamById(teamId: string | null | undefined, teams: TeamInfo[]) {
+  if (!teamId) return null;
+  return teams.find((item) => item.id === teamId) || null;
+}
+
+function cleanMatchSide(value: string | null | undefined) {
+  return (value || "")
+    .replace(/^group\s*[-]?[a-z0-9]+\s*[-:]?\s*/i, "")
+    .replace(/^group[-\s]?[a-z0-9]+\s*/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function findTeamByText(value: string | null | undefined, teams: TeamInfo[]) {
+  const cleaned = cleanMatchSide(value).toLowerCase();
+  if (!cleaned) return null;
+
+  const normalizedTeams = teams
+    .filter((team) => team.name)
+    .map((team) => ({ team, name: (team.name || "").toLowerCase().trim() }))
+    .sort((a, b) => b.name.length - a.name.length);
+
+  return (
+    normalizedTeams.find((item) => item.name === cleaned)?.team ||
+    normalizedTeams.find((item) => cleaned.includes(item.name) || item.name.includes(cleaned))?.team ||
+    null
+  );
+}
+
+function getMatchTeamParts(match: MatchRow, teams: TeamInfo[]) {
+  const title = normalizeMatchTitle(match.title);
+  const teamAById = findTeamById(match.team_a_id, teams);
+  const teamBById = findTeamById(match.team_b_id, teams);
+
+  if (teamAById || teamBById) {
+    return {
+      title,
+      teamA: teamAById,
+      teamB: teamBById,
+      labelA: teamAById?.name || "Team A",
+      labelB: teamBById?.name || "Team B",
+    };
+  }
+
+  const versusMatch = title.match(/(.+?)\s+vs\s+(.+)/i);
+  if (!versusMatch) {
+    return { title, teamA: null, teamB: null, labelA: "", labelB: "" };
+  }
+
+  const rawA = versusMatch[1].trim();
+  const rawB = versusMatch[2].trim();
+  const teamA = findTeamByText(rawA, teams);
+  const teamB = findTeamByText(rawB, teams);
+
+  return {
+    title,
+    teamA,
+    teamB,
+    labelA: teamA?.name || cleanMatchSide(rawA),
+    labelB: teamB?.name || cleanMatchSide(rawB),
+  };
+}
+
+function getTeamLogo(team: TeamInfo | null) {
+  return team?.logo_url || team?.badge || null;
+}
+
+function TeamLogoDot({ team, label }: { team: TeamInfo | null; label: string }) {
+  const logo = getTeamLogo(team);
+  if (logo) {
+    return (
+      <img
+        src={logo}
+        alt={label}
+        className="h-8 w-8 shrink-0 rounded-full object-cover ring-2 ring-white shadow-sm"
+      />
+    );
+  }
+
+  return (
+    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-xs font-black text-emerald-700 ring-1 ring-emerald-100">
+      {(label || "T").slice(0, 1).toUpperCase()}
+    </span>
+  );
+}
+
 function formatMatchDateTime(value: string | null | undefined) {
   if (!value) return "Date not announced";
   const d = new Date(value);
@@ -434,6 +528,7 @@ export default function HomePage() {
   const [tournamentTeams, setTournamentTeams] = useState<TeamInfo[]>([]);
   const [teamRankings, setTeamRankings] = useState<TeamRankingRow[]>([]);
   const [playerRankings, setPlayerRankings] = useState<PlayerRankingRow[]>([]);
+  const [playersToWatch, setPlayersToWatch] = useState<PlayerRankingRow[]>([]);
   const [upcomingMatches, setUpcomingMatches] = useState<MatchRow[]>([]);
   const [completedMatches, setCompletedMatches] = useState<MatchRow[]>([]);
   const [latestNews, setLatestNews] = useState<NewsRow[]>([]);
@@ -445,6 +540,7 @@ export default function HomePage() {
   const [loadingTournamentTeams, setLoadingTournamentTeams] = useState(true);
   const [loadingTeams, setLoadingTeams] = useState(true);
   const [loadingPlayers, setLoadingPlayers] = useState(true);
+  const [loadingPlayersWatch, setLoadingPlayersWatch] = useState(true);
 
   async function loadTournaments() {
     const { data, error } = await supabase
@@ -624,6 +720,7 @@ export default function HomePage() {
         .eq("tournament_id", tournamentId)
         .eq("status", "upcoming")
         .eq("is_featured_home", true)
+        .order("match_number", { ascending: true, nullsFirst: false })
         .order("sort_order", { ascending: true })
         .order("match_datetime", { ascending: true })
         .limit(8),
@@ -634,6 +731,7 @@ export default function HomePage() {
         .eq("tournament_id", tournamentId)
         .eq("status", "completed")
         .eq("is_featured_home", true)
+        .order("match_number", { ascending: false, nullsFirst: false })
         .order("sort_order", { ascending: true })
         .order("match_datetime", { ascending: false })
         .limit(8),
@@ -696,6 +794,8 @@ export default function HomePage() {
         season_label,
         team_name_override,
         team_logo_override_url,
+        captain_name,
+        captain_photo_url,
         teams (
           id,
           name,
@@ -737,6 +837,10 @@ export default function HomePage() {
         stat_value,
         sort_order,
         show_on_homepage,
+        show_as_player_to_watch,
+        player_watch_message,
+        player_watch_tag,
+        player_watch_sort_order,
         players (*)
       `)
       .eq("show_on_homepage", true)
@@ -754,6 +858,51 @@ export default function HomePage() {
     setLoadingPlayers(false);
   }
 
+
+
+  async function loadPlayersToWatch() {
+    setLoadingPlayersWatch(true);
+    const { data, error } = await supabase
+      .from("player_rankings")
+      .select(`
+        id,
+        player_id,
+        rank_position,
+        category,
+        award_category,
+        rating,
+        player_display_name,
+        player_name_override,
+        team_display_name,
+        player_image_url,
+        player_photo_override_url,
+        season_label,
+        period_label,
+        stat_value,
+        sort_order,
+        show_on_homepage,
+        show_as_player_to_watch,
+        player_watch_message,
+        player_watch_tag,
+        player_watch_sort_order,
+        players (*)
+      `)
+      .eq("show_as_player_to_watch", true)
+      .eq("is_active", true)
+      .order("player_watch_sort_order", { ascending: true })
+      .order("sort_order", { ascending: true })
+      .order("rank_position", { ascending: true })
+      .limit(5);
+
+    if (error) {
+      console.error(error);
+      setPlayersToWatch([]);
+    } else {
+      setPlayersToWatch((data || []) as PlayerRankingRow[]);
+    }
+    setLoadingPlayersWatch(false);
+  }
+
   useEffect(() => {
     loadTournaments();
     loadHomepageSettings();
@@ -762,6 +911,7 @@ export default function HomePage() {
     loadCommunityCards();
     loadTeamRankings();
     loadPlayerRankings();
+    loadPlayersToWatch();
     loadHomepageFeaturedVisual();
     loadLiveUpdates();
   }, []);
@@ -1221,7 +1371,7 @@ export default function HomePage() {
                     </h2>
                   </div>
                   <a
-                    href="/rankings"
+                    href="/rankings?tab=teams"
                     className="text-sm font-semibold text-emerald-700 hover:text-emerald-800"
                   >
                     Full Rankings →
@@ -1238,41 +1388,66 @@ export default function HomePage() {
                         row.team_name_override || team?.name || "Unknown Team";
                       const teamImage =
                         row.team_logo_override_url || team?.logo_url || null;
+                      const captainName = row.captain_name?.trim() || "TBA";
+                      const captainPhoto = row.captain_photo_url?.trim() || null;
 
                       return (
                         <div
                           key={row.id}
-                          className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-5 py-3.5 shadow-sm transition hover:-translate-y-[1px] hover:shadow-md"
+                          className="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm transition hover:-translate-y-[1px] hover:shadow-md"
                         >
-                          <div className="flex min-w-0 items-center gap-4">
-                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slate-900 to-slate-700 text-sm font-bold text-white shadow-sm">
-                              {row.rank_position ?? "-"}
-                            </div>
-
-                            {teamImage ? (
-                              <img
-                                src={teamImage}
-                                alt={teamName}
-                                className="h-11 w-11 shrink-0 rounded-full object-cover ring-2 ring-white shadow-sm"
-                              />
-                            ) : (
-                              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-sm font-bold text-emerald-700 ring-1 ring-emerald-100">
-                                {teamName.slice(0, 1).toUpperCase()}
+                          <div className="flex items-center justify-between gap-4">
+                            <div className="flex min-w-0 items-center gap-4">
+                              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slate-900 to-slate-700 text-sm font-bold text-white shadow-sm">
+                                {row.rank_position ?? "-"}
                               </div>
-                            )}
 
-                            <div className="min-w-0">
-                              <p className="truncate text-[15px] font-semibold text-slate-900">
-                                {teamName}
-                              </p>
-                              <p className="text-sm text-slate-500">
-                                {row.season_label || "Official Ranking"}
+                              {teamImage ? (
+                                <img
+                                  src={teamImage}
+                                  alt={teamName}
+                                  className="h-11 w-11 shrink-0 rounded-full object-cover ring-2 ring-white shadow-sm"
+                                />
+                              ) : (
+                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-sm font-bold text-emerald-700 ring-1 ring-emerald-100">
+                                  {teamName.slice(0, 1).toUpperCase()}
+                                </div>
+                              )}
+
+                              <div className="min-w-0">
+                                <p className="truncate text-[15px] font-semibold text-slate-900">
+                                  {teamName}
+                                </p>
+                                <p className="text-sm text-slate-500">
+                                  {row.season_label || "Official Ranking"}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="shrink-0 text-right">
+                              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Points</p>
+                              <p className="text-lg font-bold text-emerald-600">
+                                {row.points ?? row.rating ?? "-"}
                               </p>
                             </div>
                           </div>
-                          <p className="ml-4 shrink-0 text-lg font-bold text-emerald-600">
-                            {row.points ?? row.rating ?? "-"}
-                          </p>
+
+                          <div className="mt-3 flex items-center gap-3 rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
+                            {captainPhoto ? (
+                              <img
+                                src={captainPhoto}
+                                alt={captainName}
+                                className="h-8 w-8 rounded-full object-cover ring-2 ring-white"
+                              />
+                            ) : (
+                              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-900 text-xs font-bold text-white">
+                                {captainName.slice(0, 1).toUpperCase()}
+                              </div>
+                            )}
+                            <div className="min-w-0">
+                              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Captain</p>
+                              <p className="truncate text-sm font-semibold text-slate-900">{captainName}</p>
+                            </div>
+                          </div>
                         </div>
                       );
                     })
@@ -1398,40 +1573,106 @@ export default function HomePage() {
                     {homepageSettings.players_watch_title ||
                       fallbackHomepageSettings.players_watch_title}
                   </h2>
+                  <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">
+                    Controlled from Admin → Rankings. Tick “Player to Watch”, add tag/message, set watch order, upload photo, and save.
+                  </p>
                 </div>
                 <a
-                  href="/players"
+                  href="/rankings"
                   className="inline-flex h-11 items-center justify-center rounded-2xl border border-white/15 bg-white/10 px-4 text-sm font-semibold text-white transition hover:bg-white/15"
                 >
-                  Explore Players
+                  Open Rankings →
                 </a>
               </div>
 
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                {playersWatch.length > 0 ? (
-                  playersWatch.map((player) => (
-                    <div
-                      key={player.id}
-                      className="rounded-3xl border border-white/10 bg-white/5 p-6 lg:p-7"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-lg font-bold">{player.player_name}</p>
-                          <p className="mt-1 text-sm text-slate-300">
-                            {player.team_name}
-                          </p>
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+                {loadingPlayersWatch ? (
+                  [1, 2, 3, 4, 5].map((item) => <SkeletonRank key={item} />)
+                ) : playersToWatch.length > 0 ? (
+                  playersToWatch.slice(0, 5).map((row) => {
+                    const player = getPlayer(row);
+                    const basePlayerName = getPlayerName(player);
+                    const playerName =
+                      row.player_display_name ||
+                      row.player_name_override ||
+                      basePlayerName;
+                    const playerImage =
+                      row.player_image_url ||
+                      row.player_photo_override_url ||
+                      player?.image_url ||
+                      player?.photo_url ||
+                      player?.avatar_url ||
+                      player?.profile_image_url ||
+                      null;
+                    const rankingCategory =
+                      row.player_watch_tag || row.award_category || row.category || "Featured";
+                    const rankingPeriod =
+                      row.period_label || row.season_label || "Official";
+                    const statLine =
+                      row.player_watch_message ||
+                      row.stat_value ||
+                      `${rankingCategory} • Rank ${row.rank_position ?? "-"}`;
+                    const orderLabel = row.player_watch_sort_order ?? row.sort_order ?? row.rank_position ?? "-";
+
+                    return (
+                      <a
+                        key={row.id}
+                        href="/rankings"
+                        className="group rounded-3xl border border-white/10 bg-white/5 p-5 transition hover:-translate-y-[2px] hover:bg-white/10 hover:shadow-xl"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex min-w-0 items-center gap-3">
+                            {playerImage ? (
+                              <img
+                                src={playerImage}
+                                alt={playerName}
+                                className="h-14 w-14 shrink-0 rounded-full object-cover ring-2 ring-white/20"
+                              />
+                            ) : (
+                              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-emerald-400/15 text-lg font-black text-emerald-200 ring-1 ring-emerald-300/20">
+                                {playerName.slice(0, 1).toUpperCase()}
+                              </div>
+                            )}
+                            <div className="min-w-0">
+                              <p className="truncate text-lg font-black text-white">
+                                {playerName}
+                              </p>
+                              <p className="truncate text-sm font-semibold text-slate-300">
+                                {row.team_display_name || "CCE Player"}
+                              </p>
+                            </div>
+                          </div>
+                          <span className="rounded-full bg-emerald-400/15 px-3 py-1 text-xs font-black text-emerald-200">
+                            #{orderLabel}
+                          </span>
                         </div>
-                        <span className="rounded-full bg-emerald-400/15 px-3 py-1 text-xs font-semibold text-emerald-200">
-                          {player.tag}
-                        </span>
-                      </div>
-                      <p className="mt-4 text-sm leading-6 text-slate-300">
-                        {player.note}
-                      </p>
-                    </div>
-                  ))
+
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          <span className="rounded-full bg-white/10 px-3 py-1 text-[11px] font-black uppercase tracking-[0.16em] text-emerald-200">
+                            {rankingCategory}
+                          </span>
+                          <span className="rounded-full bg-white/10 px-3 py-1 text-[11px] font-black uppercase tracking-[0.16em] text-slate-200">
+                            {rankingPeriod}
+                          </span>
+                        </div>
+
+                        <p className="mt-4 line-clamp-2 text-sm leading-6 text-slate-300">
+                          {statLine}
+                        </p>
+
+                        <div className="mt-4 flex items-center justify-between rounded-2xl bg-white/10 px-3 py-2">
+                          <span className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-300">
+                            Rating
+                          </span>
+                          <span className="text-lg font-black text-emerald-300">
+                            {row.rating ?? "-"}
+                          </span>
+                        </div>
+                      </a>
+                    );
+                  })
                 ) : (
-                  <EmptyDarkCard text="Players to watch will be updated soon." />
+                  <EmptyDarkCard text="Select players from Admin → Rankings using the Player to Watch checkbox." />
                 )}
               </div>
             </div>
@@ -1960,7 +2201,7 @@ function MatchCarousel({
             <MatchMiniCard
               key={match.id}
               match={match}
-              matchNumber={index + 1}
+              matchNumber={match.match_number ?? index + 1}
               teams={teams}
               type={type}
               tournamentSlug={tournamentSlug}
@@ -1992,61 +2233,86 @@ function MatchMiniCard({
   const primaryLink = getMatchPrimaryLink(match);
   const scheduleLink = tournamentSlug ? `/tournaments/${tournamentSlug}#schedule` : "/tournaments";
   const isCompleted = type === "completed";
+  const matchTeams = getMatchTeamParts(match, teams);
+  const hasTeamPair = Boolean(matchTeams.labelA && matchTeams.labelB);
 
   return (
     <a
       href={scheduleLink}
       className="group block rounded-3xl border border-slate-200 bg-white p-4 transition hover:-translate-y-[1px] hover:border-emerald-300 hover:shadow-md"
     >
-      <div className="flex flex-col gap-4">
-        <div className="flex gap-4">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-slate-900 text-center text-xs font-black uppercase leading-tight text-white shadow-sm">
-            M{matchNumber}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+        <div className="flex shrink-0 items-center gap-3 sm:block">
+          <div className="flex h-14 min-w-[76px] flex-col items-center justify-center rounded-2xl bg-gradient-to-br from-slate-950 to-slate-800 px-3 text-center text-white shadow-sm ring-1 ring-white/10">
+            <span className="text-[9px] font-black uppercase tracking-[0.18em] text-emerald-200">
+              Match
+            </span>
+            <span className="mt-0.5 text-lg font-black leading-none">#{matchNumber}</span>
           </div>
-
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-700">
-              {isCompleted ? "Completed Result" : "Upcoming Match"}
-            </p>
-            <h4 className="mt-1 text-base font-black leading-snug text-slate-950">
-              {buildHomepageMatchTitle(match, teams)}
-            </h4>
-
-            {isCompleted ? (
-              <div className="mt-3 space-y-1 text-sm text-slate-600">
-                <p>
-                  <span className="font-bold text-slate-900">Result:</span>{" "}
-                  {match.result_summary || "Result summary not updated"}
-                </p>
-                <p>
-                  <span className="font-bold text-slate-900">Player of the Match:</span>{" "}
-                  {match.player_of_match || "Not updated"}
-                </p>
-              </div>
-            ) : (
-              <div className="mt-3 grid gap-2 text-sm text-slate-600 sm:grid-cols-2">
-                <p>
-                  <span className="font-bold text-slate-900">Time:</span>{" "}
-                  {formatMatchDateTime(match.match_datetime)}
-                </p>
-                <p>
-                  <span className="font-bold text-slate-900">Venue:</span>{" "}
-                  {match.venue || "Venue update soon"}
-                </p>
-              </div>
-            )}
-          </div>
+          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-700 sm:hidden">
+            {isCompleted ? "Completed Result" : "Upcoming Match"}
+          </p>
         </div>
 
-        <div className="flex shrink-0 flex-wrap gap-2 pl-[3.75rem]">
-          <span className="inline-flex h-9 items-center justify-center rounded-xl bg-slate-900 px-3 text-xs font-bold text-white transition group-hover:bg-emerald-700">
-            Details →
-          </span>
-          {isCompleted && primaryLink ? (
-            <span className="inline-flex h-9 items-center justify-center rounded-xl border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700">
-              Scorecard
+        <div className="min-w-0 flex-1">
+          <p className="hidden text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-700 sm:block">
+            {isCompleted ? "Completed Result" : "Upcoming Match"}
+          </p>
+
+          {hasTeamPair ? (
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-base font-black leading-snug text-slate-950 sm:text-lg">
+              <span className="inline-flex min-w-0 items-center gap-2">
+                <TeamLogoDot team={matchTeams.teamA} label={matchTeams.labelA} />
+                <span className="min-w-0">{matchTeams.labelA}</span>
+              </span>
+              <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">
+                vs
+              </span>
+              <span className="inline-flex min-w-0 items-center gap-2">
+                <TeamLogoDot team={matchTeams.teamB} label={matchTeams.labelB} />
+                <span className="min-w-0">{matchTeams.labelB}</span>
+              </span>
+            </div>
+          ) : (
+            <h4 className="mt-1 text-base font-black leading-snug text-slate-950 sm:text-lg">
+              {buildHomepageMatchTitle(match, teams)}
+            </h4>
+          )}
+
+          {isCompleted ? (
+            <div className="mt-3 space-y-1 text-sm text-slate-600">
+              <p>
+                <span className="font-bold text-slate-900">Result:</span>{" "}
+                {match.result_summary || "Result summary not updated"}
+              </p>
+              <p>
+                <span className="font-bold text-slate-900">Player of the Match:</span>{" "}
+                {match.player_of_match || "Not updated"}
+              </p>
+            </div>
+          ) : (
+            <div className="mt-3 grid gap-2 text-sm text-slate-600 sm:grid-cols-2">
+              <p>
+                <span className="font-bold text-slate-900">Time:</span>{" "}
+                {formatMatchDateTime(match.match_datetime)}
+              </p>
+              <p>
+                <span className="font-bold text-slate-900">Venue:</span>{" "}
+                {match.venue || "Venue update soon"}
+              </p>
+            </div>
+          )}
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            <span className="inline-flex h-9 items-center justify-center rounded-xl bg-slate-900 px-3 text-xs font-bold text-white transition group-hover:bg-emerald-700">
+              Details →
             </span>
-          ) : null}
+            {isCompleted && primaryLink ? (
+              <span className="inline-flex h-9 items-center justify-center rounded-xl border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700">
+                Scorecard
+              </span>
+            ) : null}
+          </div>
         </div>
       </div>
     </a>

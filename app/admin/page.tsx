@@ -15,7 +15,6 @@ type AdminModule = {
 };
 
 const adminModules: AdminModule[] = [
-
   {
     title: "Menu Control",
     description: "Show, hide and reorder public header menu items without editing code.",
@@ -48,6 +47,13 @@ const adminModules: AdminModule[] = [
     title: "Homepage Live Updates",
     description: "Create, edit, sort and delete rotating homepage live update cards.",
     href: "/admin/homepage-live-updates",
+    tag: "Homepage",
+    group: "Homepage Control",
+  },
+  {
+    title: "Homepage Players to Watch",
+    description: "Create and control editorial player watchlist cards on the homepage.",
+    href: "/admin/homepage-players-watch",
     tag: "Homepage",
     group: "Homepage Control",
   },
@@ -92,8 +98,8 @@ const adminModules: AdminModule[] = [
     title: "Player Rankings",
     description: "Manage top batsmen, bowlers, MVPs and player ranking data.",
     href: "/admin/player-rankings",
-    tag: "Players",
-    group: "Player Control",
+    tag: "Rankings",
+    group: "Match & Ranking",
   },
   {
     title: "Ranking IDs",
@@ -112,8 +118,15 @@ const adminModules: AdminModule[] = [
 
   {
     title: "Player Directory Import",
-    description: "Upload CCE yearly player performance CSV and build the public player directory with team-wise profiles.",
+    description: "Upload CCE yearly performance CSV and build public player directory profiles.",
     href: "/admin/player-directory-import",
+    tag: "Players",
+    group: "Player Control",
+  },
+  {
+    title: "Player Rankings",
+    description: "Manage top players, homepage ranking preview, photos and ranking import controls.",
+    href: "/admin/rankings",
     tag: "Players",
     group: "Player Control",
   },
@@ -122,8 +135,8 @@ const adminModules: AdminModule[] = [
     title: "Player Approvals",
     description: "Approve, reject or request changes for player registrations.",
     href: "/admin/player-approvals",
-    tag: "Players",
-    group: "Player Control",
+    tag: "Registration",
+    group: "Registration Control",
   },
   {
     title: "Team Approvals",

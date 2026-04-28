@@ -54,6 +54,10 @@ type AdminRankingRow = {
   show_on_homepage: boolean | null;
   is_active: boolean | null;
   sort_order: number | null;
+  show_as_player_to_watch?: boolean | null;
+  player_watch_message?: string | null;
+  player_watch_tag?: string | null;
+  player_watch_sort_order?: number | null;
 };
 
 
@@ -418,7 +422,7 @@ export default function AdminRankingsPage() {
     setLoadingRankingRows(true);
     let query = supabase
       .from("player_rankings")
-      .select("id, rank_position, award_category, category, player_display_name, player_name_override, team_display_name, matches, runs, wickets, rating, stat_value, season_label, period_label, player_image_url, player_photo_override_url, show_on_homepage, is_active, sort_order")
+      .select("id, rank_position, award_category, category, player_display_name, player_name_override, team_display_name, matches, runs, wickets, rating, stat_value, season_label, period_label, player_image_url, player_photo_override_url, show_on_homepage, show_as_player_to_watch, player_watch_message, player_watch_tag, player_watch_sort_order, is_active, sort_order")
       .eq("is_active", true)
       .order("season_label", { ascending: true })
       .order("award_category", { ascending: true })
@@ -807,7 +811,7 @@ export default function AdminRankingsPage() {
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700">Homepage Ranking Control</p>
               <h2 className="mt-2 text-2xl font-bold">Featured Player Rankings</h2>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-                Choose which imported ranking rows appear on the homepage. Recommended preset: MVP, Batsman, and Bowler from Last 2 Years. Player profile pictures can be uploaded here until player registration becomes the master source.
+                Choose ranking rows for Top Players and optionally mark different rows as Players to Watch. When Player to Watch is checked, write a short homepage message and save the row.
               </p>
             </div>
             <button
@@ -906,8 +910,41 @@ export default function AdminRankingsPage() {
                           value={row.sort_order ?? 0}
                           onChange={(e) => updateRankingRow(row.id, { sort_order: Number(e.target.value || 0) })}
                           className="h-10 w-24 rounded-2xl border border-slate-200 bg-white px-3 text-sm"
-                          title="Homepage order"
+                          title="Top Players order"
                         />
+                        <label className="inline-flex cursor-pointer items-center gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900">
+                          <input
+                            type="checkbox"
+                            checked={row.show_as_player_to_watch === true}
+                            onChange={(e) => updateRankingRow(row.id, { show_as_player_to_watch: e.target.checked })}
+                          />
+                          Player to Watch
+                        </label>
+                        <input
+                          type="number"
+                          value={row.player_watch_sort_order ?? row.sort_order ?? 0}
+                          onChange={(e) => updateRankingRow(row.id, { player_watch_sort_order: Number(e.target.value || 0) })}
+                          className="h-10 w-24 rounded-2xl border border-amber-200 bg-white px-3 text-sm"
+                          title="Players to Watch order"
+                        />
+                        {row.show_as_player_to_watch === true ? (
+                          <>
+                            <select
+                              value={row.player_watch_tag || "Rising Star"}
+                              onChange={(e) => updateRankingRow(row.id, { player_watch_tag: e.target.value })}
+                              className="h-10 rounded-2xl border border-amber-200 bg-white px-3 text-sm font-semibold text-slate-700"
+                              title="Watch tag"
+                            >
+                              <option>Rising Star</option>
+                              <option>Match Winner</option>
+                              <option>Power Hitter</option>
+                              <option>All-Round Impact</option>
+                              <option>Bowling Threat</option>
+                              <option>Captain's Pick</option>
+                              <option>Player to Watch</option>
+                            </select>
+                          </>
+                        ) : null}
                         <input
                           type="file"
                           accept="image/*"
@@ -925,6 +962,10 @@ export default function AdminRankingsPage() {
                               sort_order: row.sort_order ?? 0,
                               player_image_url: row.player_image_url,
                               player_photo_override_url: row.player_photo_override_url ?? null,
+                              show_as_player_to_watch: row.show_as_player_to_watch === true,
+                              player_watch_tag: row.player_watch_tag || null,
+                              player_watch_message: row.player_watch_message || null,
+                              player_watch_sort_order: row.player_watch_sort_order ?? 0,
                             })
                           }
                           disabled={updatingRankingId === row.id}
@@ -935,6 +976,19 @@ export default function AdminRankingsPage() {
                         {updatingRankingId === row.id ? <span className="text-xs font-semibold text-emerald-700">Saving...</span> : null}
                       </div>
                     </div>
+                    {row.show_as_player_to_watch === true ? (
+                      <div className="mt-3 grid gap-2 lg:grid-cols-[160px_1fr]">
+                        <div className="rounded-2xl bg-amber-50 px-4 py-3 text-xs font-bold uppercase tracking-[0.18em] text-amber-800">
+                          Watch Message
+                        </div>
+                        <textarea
+                          value={row.player_watch_message || ""}
+                          onChange={(e) => updateRankingRow(row.id, { player_watch_message: e.target.value })}
+                          placeholder="Write the short homepage message for this player..."
+                          className="min-h-[74px] rounded-2xl border border-amber-200 bg-white px-4 py-3 text-sm outline-none focus:border-amber-500"
+                        />
+                      </div>
+                    ) : null}
                   </div>
                 );
               })

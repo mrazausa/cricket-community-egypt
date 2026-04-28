@@ -40,8 +40,6 @@ type TeamRankingRow = {
   season_label: string | null;
   team_name_override?: string | null;
   team_logo_override_url?: string | null;
-  captain_name?: string | null;
-  captain_photo_url?: string | null;
   updated_at?: string | null;
   teams?: TeamInfo | TeamInfo[] | null;
 };
@@ -85,13 +83,6 @@ export default function RankingsPage() {
 
   const [selectedPeriod, setSelectedPeriod] = useState<string>("Last 2 Years");
 
-  useEffect(() => {
-    const tab = new URLSearchParams(window.location.search).get("tab");
-    if (tab === "teams" || tab === "players") {
-      setActiveTab(tab);
-    }
-  }, []);
-
   async function loadTeamRankings() {
     setLoadingTeams(true);
     setTeamError("");
@@ -111,8 +102,6 @@ export default function RankingsPage() {
           season_label,
           team_name_override,
           team_logo_override_url,
-          captain_name,
-          captain_photo_url,
           updated_at,
           teams (
             id,

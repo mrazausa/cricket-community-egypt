@@ -27,6 +27,8 @@ type TeamRankingRow = {
   season_label: string | null;
   team_name_override: string | null;
   team_logo_override_url: string | null;
+  captain_name?: string | null;
+  captain_photo_url?: string | null;
   is_active: boolean | null;
   show_on_homepage: boolean | null;
   sort_order: number | null;
@@ -47,6 +49,8 @@ type EditableRow = {
   season_label: string;
   team_name_override: string;
   team_logo_override_url: string;
+  captain_name: string;
+  captain_photo_url: string;
   is_active: boolean;
   show_on_homepage: boolean;
   sort_order: string;
@@ -64,6 +68,8 @@ const EMPTY_EDITABLE: EditableRow = {
   season_label: "current",
   team_name_override: "",
   team_logo_override_url: "",
+  captain_name: "",
+  captain_photo_url: "",
   is_active: true,
   show_on_homepage: true,
   sort_order: "",
@@ -79,6 +85,8 @@ export default function AdminTeamRankingsPage() {
   const [creating, setCreating] = useState(false);
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [uploadingNewLogo, setUploadingNewLogo] = useState(false);
+  const [uploadingCaptainId, setUploadingCaptainId] = useState<string | null>(null);
+  const [uploadingNewCaptain, setUploadingNewCaptain] = useState(false);
   const [message, setMessage] = useState("");
   const [errorText, setErrorText] = useState("");
 
@@ -107,6 +115,8 @@ export default function AdminTeamRankingsPage() {
         season_label,
         team_name_override,
         team_logo_override_url,
+        captain_name,
+        captain_photo_url,
         is_active,
         show_on_homepage,
         sort_order,
@@ -154,6 +164,8 @@ export default function AdminTeamRankingsPage() {
       season_label: row.season_label ?? "current",
       team_name_override: row.team_name_override ?? "",
       team_logo_override_url: row.team_logo_override_url ?? "",
+      captain_name: row.captain_name ?? "",
+      captain_photo_url: row.captain_photo_url ?? "",
       is_active: row.is_active ?? true,
       show_on_homepage: row.show_on_homepage ?? true,
       sort_order: row.sort_order?.toString() ?? "",
@@ -214,6 +226,36 @@ export default function AdminTeamRankingsPage() {
     }
   }
 
+  async function handleCaptainPhotoUpload(rowId: string, file: File) {
+    try {
+      setUploadingCaptainId(rowId);
+      setMessage("");
+      setErrorText("");
+      const publicUrl = await uploadLogo(file, `team-captain-${rowId}`);
+      updateRowField(rowId, "captain_photo_url", publicUrl);
+      setMessage("Captain photo uploaded successfully. Click Save to apply.");
+    } catch (error: any) {
+      setErrorText(error?.message || "Failed to upload captain photo.");
+    } finally {
+      setUploadingCaptainId(null);
+    }
+  }
+
+  async function handleNewCaptainPhotoUpload(file: File) {
+    try {
+      setUploadingNewCaptain(true);
+      setMessage("");
+      setErrorText("");
+      const publicUrl = await uploadLogo(file, "team-captain-new");
+      updateNewField("captain_photo_url", publicUrl);
+      setMessage("Captain photo uploaded successfully. Create the ranking row to save it.");
+    } catch (error: any) {
+      setErrorText(error?.message || "Failed to upload captain photo.");
+    } finally {
+      setUploadingNewCaptain(false);
+    }
+  }
+
   async function handleNewLogoUpload(file: File) {
     try {
       setUploadingNewLogo(true);
@@ -242,6 +284,8 @@ export default function AdminTeamRankingsPage() {
       season_label: toTextOrNull(current.season_label),
       team_name_override: toTextOrNull(current.team_name_override),
       team_logo_override_url: toTextOrNull(current.team_logo_override_url),
+      captain_name: toTextOrNull(current.captain_name),
+      captain_photo_url: toTextOrNull(current.captain_photo_url),
       is_active: current.is_active,
       show_on_homepage: current.show_on_homepage,
       sort_order: toNumberOrNull(current.sort_order),
@@ -428,6 +472,7 @@ export default function AdminTeamRankingsPage() {
             <TextInput label="Form" value={newForm.form} onChange={(value) => updateNewField("form", value)} placeholder="W W W L W" />
             <TextInput label="Season" value={newForm.season_label} onChange={(value) => updateNewField("season_label", value)} placeholder="current" />
             <TextInput label="Sort Order" value={newForm.sort_order} onChange={(value) => updateNewField("sort_order", value)} placeholder="1" />
+            <TextInput label="Captain Name" value={newForm.captain_name} onChange={(value) => updateNewField("captain_name", value)} placeholder="Captain name" />
 
             <div>
               <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Logo</label>
@@ -446,6 +491,29 @@ export default function AdminTeamRankingsPage() {
                     onChange={(event) => {
                       const file = event.target.files?.[0];
                       if (file) handleNewLogoUpload(file);
+                    }}
+                  />
+                </label>
+              </div>
+            </div>
+
+            <div>
+              <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Captain Photo</label>
+              <div className="flex items-center gap-3">
+                {newForm.captain_photo_url ? (
+                  <img src={newForm.captain_photo_url} alt="Captain" className="h-11 w-11 rounded-full object-cover ring-1 ring-white/15" />
+                ) : (
+                  <div className="flex h-11 w-11 items-center justify-center rounded-full bg-sky-500/10 text-sm font-bold text-sky-300 ring-1 ring-sky-400/20">C</div>
+                )}
+                <label className="inline-flex h-11 cursor-pointer items-center justify-center rounded-xl bg-white px-4 text-sm font-bold text-slate-950 transition hover:bg-slate-100">
+                  {uploadingNewCaptain ? "Uploading..." : "Upload"}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file) handleNewCaptainPhotoUpload(file);
                     }}
                   />
                 </label>
@@ -479,6 +547,7 @@ export default function AdminTeamRankingsPage() {
                 const form = formState[row.id] || EMPTY_EDITABLE;
                 const displayName = getDisplayName(row, form, team);
                 const image = getTeamImage(row, form, team);
+                const captainPhoto = form.captain_photo_url || row.captain_photo_url || null;
 
                 return (
                   <article key={row.id} className="rounded-3xl border border-white/10 bg-slate-900/70 p-4 ring-1 ring-transparent transition hover:ring-emerald-400/20 sm:p-5">
@@ -494,6 +563,7 @@ export default function AdminTeamRankingsPage() {
                         <div className="min-w-0">
                           <p className="truncate text-xl font-bold text-white">{displayName}</p>
                           <p className="mt-1 text-xs text-slate-400">Base team: {team?.name || "Static / not linked yet"}</p>
+                          <p className="mt-1 text-xs text-slate-400">Captain: {form.captain_name || "TBA"}</p>
                           <p className="mt-1 break-all text-xs text-slate-500">Row ID: {row.id}</p>
                         </div>
                       </div>
@@ -531,6 +601,8 @@ export default function AdminTeamRankingsPage() {
                       <TextInput label="Season" value={form.season_label} onChange={(value) => updateRowField(row.id, "season_label", value)} placeholder="current" />
                       <TextInput label="Sort Order" value={form.sort_order} onChange={(value) => updateRowField(row.id, "sort_order", value)} placeholder="1" />
                       <TextInput label="Logo URL" value={form.team_logo_override_url} onChange={(value) => updateRowField(row.id, "team_logo_override_url", value)} placeholder="Auto-filled after upload" />
+                      <TextInput label="Captain Name" value={form.captain_name} onChange={(value) => updateRowField(row.id, "captain_name", value)} placeholder="Captain name" />
+                      <TextInput label="Captain Photo URL" value={form.captain_photo_url} onChange={(value) => updateRowField(row.id, "captain_photo_url", value)} placeholder="Auto-filled after upload" />
                     </div>
 
                     <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -543,6 +615,19 @@ export default function AdminTeamRankingsPage() {
                           onChange={(event) => {
                             const file = event.target.files?.[0];
                             if (file) handleTeamLogoUpload(row.id, file);
+                          }}
+                        />
+                      </label>
+
+                      <label className="inline-flex h-11 cursor-pointer items-center justify-center rounded-xl border border-sky-300/30 bg-sky-500/10 px-4 text-sm font-bold text-sky-100 transition hover:bg-sky-500/20">
+                        {uploadingCaptainId === row.id ? "Uploading..." : "Upload Captain"}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(event) => {
+                            const file = event.target.files?.[0];
+                            if (file) handleCaptainPhotoUpload(row.id, file);
                           }}
                         />
                       </label>
