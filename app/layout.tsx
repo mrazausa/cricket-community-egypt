@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Cricket Community Egypt",
-  description: "Premium cricket platform for Egypt",
+  description: "Uniting Cricket Enthusiasts",
 };
 
 export default function RootLayout({
