@@ -1424,10 +1424,15 @@ export default function HomePage() {
                               </div>
                             </div>
                             <div className="shrink-0 text-right">
-                              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Points</p>
+                              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Win %</p>
                               <p className="text-lg font-bold text-emerald-600">
-                                {row.points ?? row.rating ?? "-"}
+                                {row.rating ?? "-"}
                               </p>
+                              {row.points !== null && row.points !== undefined && (
+                                <p className="mt-0.5 text-[11px] font-semibold text-slate-400">
+                                  Pts {row.points}
+                                </p>
+                              )}
                             </div>
                           </div>
 
