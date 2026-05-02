@@ -43,7 +43,11 @@ type CsvPlayerStat = {
   runs: number;
   battingAvg: number;
   battingSr: number;
+  fifties: number;
+  hundreds: number;
   wickets: number;
+  threeWkts: number;
+  fiveWkts: number;
   bowlingAvg: number;
   economy: number;
   catches: number;
@@ -88,7 +92,9 @@ const emptyForm: TournamentForm = {
 
 const awardCategories = [
   "Best Player / MVP",
+  "Most Runs",
   "Best Batsman",
+  "Most Wickets",
   "Best Bowler",
   "Best All Rounder",
   "Best Wicket Keeper",
@@ -225,7 +231,11 @@ const headers = parseCsvLine(lines[headerIndex]).map(normalizeHeader);
       runs: toNumber(getValue(row, ["Runs Scored", "Runs", "R"])),
       battingAvg: toNumber(getValue(row, ["Batting Avg", "Bat Avg", "Average", "Avg"])),
       battingSr: toNumber(getValue(row, ["Bat SR", "Strike Rate", "SR", "Batting Strike Rate"])),
+      fifties: toNumber(getValue(row, ["50s", "50", "Fifties", "Half Centuries"])),
+      hundreds: toNumber(getValue(row, ["100s", "100", "Hundreds", "Centuries"])),
       wickets: toNumber(getValue(row, ["Wickets", "Wkts", "W"])),
+      threeWkts: toNumber(getValue(row, ["3 Wkts", "3Wkts", "3 Wickets", "Three Wickets"])),
+      fiveWkts: toNumber(getValue(row, ["5 Wkts", "5Wkts", "5 Wickets", "Five Wickets"])),
       bowlingAvg: toNumber(getValue(row, ["Bowl Avg", "Bowling Avg", "Bowling Average"])),
       economy: toNumber(getValue(row, ["Economy", "Eco", "Econ"])),
       catches: toNumber(getValue(row, ["Catches", "Ct"])),
@@ -235,29 +245,52 @@ const headers = parseCsvLine(lines[headerIndex]).map(normalizeHeader);
   }).filter((item) => item.playerName.trim().length > 0);
 }
 
-function uniqueTopPlayers(players: CsvPlayerStat[], scoreFn: (player: CsvPlayerStat) => number, limit = 3) {
-  return [...players]
-    .map((player) => ({ player, score: scoreFn(player) }))
-    .filter((item) => item.score > 0)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, limit);
+function roundScore(value: number, decimals = 2) {
+  return Number(value.toFixed(decimals));
+}
+
+function battingPoints(player: CsvPlayerStat) {
+  return (
+    (player.runs >= 10 ? player.runs / 10 : 0) +
+    player.fifties +
+    player.hundreds +
+    (player.runs >= 10 && player.battingSr >= 130 ? 1 : 0)
+  );
+}
+
+function bowlingPoints(player: CsvPlayerStat) {
+  return player.wickets * 2 + player.threeWkts + player.fiveWkts;
+}
+
+function fieldingPoints(player: CsvPlayerStat) {
+  return player.catches + player.stumpings + player.runOuts;
 }
 
 function calculateStumpsMvpPoints(player: CsvPlayerStat) {
-  const battingPoints =
-    Math.floor(player.runs / 10) +
-    (player.runs >= 50 ? 1 : 0) +
-    (player.runs >= 100 ? 1 : 0) +
-    (player.runs >= 10 && player.battingSr >= 130 ? 1 : 0);
+  return battingPoints(player) + bowlingPoints(player) + fieldingPoints(player);
+}
 
-  const bowlingPoints =
-    player.wickets * 2 +
-    (player.wickets >= 3 ? 1 : 0) +
-    (player.wickets >= 5 ? 1 : 0);
+function rankPlayers(
+  players: CsvPlayerStat[],
+  scoreFn: (player: CsvPlayerStat) => number,
+  tieBreakers: ((a: CsvPlayerStat, b: CsvPlayerStat) => number)[] = [],
+  limit = 3
+) {
+  return [...players]
+    .map((player) => ({ player, score: scoreFn(player) }))
+    .filter((item) => item.score > 0)
+    .sort((a, b) => {
+      const scoreDiff = b.score - a.score;
+      if (scoreDiff !== 0) return scoreDiff;
 
-  const fieldingPoints = player.catches + player.stumpings + player.runOuts;
+      for (const tieBreaker of tieBreakers) {
+        const diff = tieBreaker(a.player, b.player);
+        if (diff !== 0) return diff;
+      }
 
-  return battingPoints + bowlingPoints + fieldingPoints;
+      return a.player.playerName.localeCompare(b.player.playerName);
+    })
+    .slice(0, limit);
 }
 
 function buildPerformersFromStats(tournamentId: string, players: CsvPlayerStat[]) {
@@ -276,7 +309,7 @@ function buildPerformersFromStats(tournamentId: string, players: CsvPlayerStat[]
         player_photo_url: null,
         award_category: category,
         stat_line: row.statLine,
-        rating: Number(row.score.toFixed(2)),
+        rating: roundScore(row.score),
         rank: index + 1,
         is_active: true,
         show_on_tournament_page: true,
@@ -285,19 +318,28 @@ function buildPerformersFromStats(tournamentId: string, players: CsvPlayerStat[]
     });
   };
 
-  const mvpRows = uniqueTopPlayers(
+  const mvpRows = rankPlayers(
     players,
     calculateStumpsMvpPoints,
+    [
+      (a, b) => battingPoints(b) - battingPoints(a),
+      (a, b) => bowlingPoints(b) - bowlingPoints(a),
+      (a, b) => fieldingPoints(b) - fieldingPoints(a),
+    ],
     3
   ).map(({ player, score }) => ({
     player,
     score,
-    statLine: `${player.runs} runs, ${player.wickets} wkts, ${player.catches + player.stumpings + player.runOuts} fielding pts • STUMPS MVP ${score}`,
+    statLine: `Bat ${roundScore(battingPoints(player), 1)} • Bowl ${roundScore(bowlingPoints(player), 1)} • Field ${roundScore(fieldingPoints(player), 1)}`,
   }));
 
-  const battingRows = uniqueTopPlayers(
+  const mostRunsRows = rankPlayers(
     players,
-    (p) => p.runs + p.battingSr * 0.25 + p.battingAvg * 0.45,
+    (p) => p.runs,
+    [
+      (a, b) => b.battingAvg - a.battingAvg,
+      (a, b) => b.battingSr - a.battingSr,
+    ],
     3
   ).map(({ player, score }) => ({
     player,
@@ -305,29 +347,67 @@ function buildPerformersFromStats(tournamentId: string, players: CsvPlayerStat[]
     statLine: `${player.runs} runs • Avg ${player.battingAvg || 0} • SR ${player.battingSr || 0}`,
   }));
 
-  const bowlingRows = uniqueTopPlayers(
+  const bestBatsmanRows = rankPlayers(
     players,
-    (p) => p.wickets * 25 + (p.economy > 0 ? Math.max(0, 12 - p.economy) * 5 : 0),
+    battingPoints,
+    [
+      (a, b) => b.runs - a.runs,
+      (a, b) => b.battingAvg - a.battingAvg,
+      (a, b) => b.battingSr - a.battingSr,
+    ],
     3
   ).map(({ player, score }) => ({
     player,
     score,
-    statLine: `${player.wickets} wickets • Economy ${player.economy || 0}`,
+    statLine: `Bat points ${roundScore(score, 1)} • ${player.runs} runs • Avg ${player.battingAvg || 0} • SR ${player.battingSr || 0}`,
   }));
 
-  const allRoundRows = uniqueTopPlayers(
+  const mostWicketsRows = rankPlayers(
     players,
-    (p) => p.runs * 0.55 + p.wickets * 20 + p.catches * 3,
+    (p) => p.wickets,
+    [
+      (a, b) => (a.economy || 99) - (b.economy || 99),
+      (a, b) => bowlingPoints(b) - bowlingPoints(a),
+    ],
     3
   ).map(({ player, score }) => ({
     player,
     score,
-    statLine: `${player.runs} runs • ${player.wickets} wickets • ${player.catches} catches`,
+    statLine: `${player.wickets} wickets • Economy ${player.economy || 0} • Bowl Avg ${player.bowlingAvg || 0}`,
   }));
 
-  const keeperRows = uniqueTopPlayers(
+  const bestBowlerRows = rankPlayers(
     players,
-    (p) => p.stumpings * 12 + p.catches * 5,
+    bowlingPoints,
+    [
+      (a, b) => b.wickets - a.wickets,
+      (a, b) => (a.economy || 99) - (b.economy || 99),
+    ],
+    3
+  ).map(({ player, score }) => ({
+    player,
+    score,
+    statLine: `Bowl points ${roundScore(score, 1)} • ${player.wickets} wickets • Economy ${player.economy || 0}`,
+  }));
+
+  const allRoundRows = rankPlayers(
+    players.filter((p) => p.runs >= 10 && p.wickets >= 1),
+    (p) => battingPoints(p) + bowlingPoints(p) + fieldingPoints(p),
+    [
+      (a, b) => bowlingPoints(b) - bowlingPoints(a),
+      (a, b) => battingPoints(b) - battingPoints(a),
+    ],
+    3
+  ).map(({ player, score }) => ({
+    player,
+    score,
+    statLine: `${player.runs} runs • ${player.wickets} wickets • ${fieldingPoints(player)} fielding pts`,
+  }));
+
+  const keeperRows = rankPlayers(
+    players,
+    (p) => p.stumpings * 2 + p.catches,
+    [(a, b) => b.stumpings - a.stumpings, (a, b) => b.catches - a.catches],
     2
   ).map(({ player, score }) => ({
     player,
@@ -335,9 +415,10 @@ function buildPerformersFromStats(tournamentId: string, players: CsvPlayerStat[]
     statLine: `${player.catches} catches • ${player.stumpings} stumpings`,
   }));
 
-  const fielderRows = uniqueTopPlayers(
+  const fielderRows = rankPlayers(
     players,
-    (p) => p.catches * 6 + p.runOuts * 8,
+    (p) => p.catches + p.runOuts,
+    [(a, b) => b.catches - a.catches, (a, b) => b.runOuts - a.runOuts],
     2
   ).map(({ player, score }) => ({
     player,
@@ -345,19 +426,21 @@ function buildPerformersFromStats(tournamentId: string, players: CsvPlayerStat[]
     statLine: `${player.catches} catches • ${player.runOuts} run outs`,
   }));
 
-  const pomRows = uniqueTopPlayers(players, (p) => p.pomAwards * 25, 2).map(({ player, score }) => ({
+  const pomRows = rankPlayers(players, (p) => p.pomAwards, [(a, b) => calculateStumpsMvpPoints(b) - calculateStumpsMvpPoints(a)], 2).map(({ player, score }) => ({
     player,
     score,
     statLine: `${player.pomAwards} Player of the Match awards`,
   }));
 
   addAward("Best Player / MVP", mvpRows, 1);
-  addAward("Best Batsman", battingRows, 20);
-  addAward("Best Bowler", bowlingRows, 40);
-  addAward("Best All Rounder", allRoundRows, 60);
-  addAward("Best Wicket Keeper", keeperRows, 80);
-  addAward("Best Fielder", fielderRows, 100);
-  addAward("POM Leader", pomRows, 120);
+  addAward("Most Runs", mostRunsRows, 20);
+  addAward("Best Batsman", bestBatsmanRows, 40);
+  addAward("Most Wickets", mostWicketsRows, 60);
+  addAward("Best Bowler", bestBowlerRows, 80);
+  addAward("Best All Rounder", allRoundRows, 100);
+  addAward("Best Wicket Keeper", keeperRows, 120);
+  addAward("Best Fielder", fielderRows, 140);
+  addAward("POM Leader", pomRows, 160);
 
   return inserts;
 }
@@ -392,6 +475,15 @@ export default function TournamentDesignAdmin() {
     () => tournaments.find((item) => item.id === selectedId) || null,
     [selectedId, tournaments]
   );
+
+  const groupedPerformers = useMemo(() => {
+    return awardCategories
+      .map((category) => ({
+        category,
+        rows: performers.filter((item) => (item.award_category || "") === category),
+      }))
+      .filter((group) => group.rows.length > 0);
+  }, [performers]);
 
   async function loadTournaments() {
     setLoading(true);
@@ -578,6 +670,7 @@ export default function TournamentDesignAdmin() {
       venue: form.venue || null,
       format: form.format || null,
       start_date: form.start_date || null,
+      end_date: form.end_date || null,
       is_featured_home: form.is_featured_home === true,
       hero_title_font_mobile: Number(form.hero_title_font_mobile || 32),
       hero_title_font_desktop: Number(form.hero_title_font_desktop || 60),
@@ -716,7 +809,7 @@ export default function TournamentDesignAdmin() {
 
               <AdminCard title="STUMPS CSV Import" eyebrow="Tournament Top Performers">
                 <p className="text-sm leading-6 text-slate-600">
-                  Upload the tournament stats CSV from STUMPS. This will replace existing top performers for the selected tournament only and calculate MVP, batsman, bowler, all-rounder, keeper, fielder, and POM leader.
+                  Upload the tournament stats CSV from STUMPS. This replaces existing top performers for the selected tournament only and calculates MVP, Most Runs, Best Batsman, Most Wickets, Best Bowler, All-Rounder, Keeper, Fielder, and POM Leader.
                 </p>
 
                 {csvSummary ? (
@@ -738,7 +831,7 @@ export default function TournamentDesignAdmin() {
                 <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
                   <p className="text-sm font-bold text-slate-900">Expected CSV columns</p>
                   <p className="mt-2 text-sm leading-6 text-slate-600">
-                    Player Name, Team Name, Matches, POM Awards, Runs Scored, Batting Avg, Bat SR, Wickets, Bowl Avg, Economy, Catches, Stumpings, Run Outs.
+                    Player Name, Team Name, Matches, POM Awards, Runs Scored, Batting Avg, Bat SR, 50s, 100s, Wickets, 3 Wkts, 5 Wkts, Bowl Avg, Economy, Catches, Stumpings, Run Outs.
                   </p>
                 </div>
               </AdminCard>
@@ -749,32 +842,55 @@ export default function TournamentDesignAdmin() {
                     No tournament top performers imported yet.
                   </div>
                 ) : (
-                  <div className="space-y-3">
-                    {performers.map((item) => (
-                      <div key={item.id} className="flex flex-col gap-3 rounded-2xl border border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between">
-                        <div>
-                          <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">
-                            {item.award_category || "Award"} • Rank {item.rank || "-"}
-                          </p>
-                          <p className="mt-1 text-base font-bold text-slate-950">{item.player_name}</p>
-                          <p className="text-sm text-slate-600">{item.team_name || "Team not set"}</p>
-                          <p className="mt-1 text-sm text-slate-500">{item.stat_line || "No stat line"}</p>
+                  <div className="space-y-6">
+                    {groupedPerformers.map((group) => (
+                      <div key={group.category} className="overflow-hidden rounded-[28px] border border-slate-200 bg-gradient-to-br from-white via-slate-50 to-emerald-50/40 shadow-sm">
+                        <div className="flex flex-col gap-2 border-b border-slate-200 bg-white/80 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <p className="text-[11px] font-black uppercase tracking-[0.24em] text-emerald-700">Category Block</p>
+                            <h3 className="mt-1 text-xl font-black text-slate-950">{group.category}</h3>
+                          </div>
+                          <span className="w-fit rounded-full bg-slate-950 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-white">
+                            Top {group.rows.length}
+                          </span>
                         </div>
-                        <div className="flex gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setEditingPerformer({ ...item })}
-                            className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-bold text-blue-700 hover:bg-blue-100"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => deletePerformer(item.id)}
-                            className="rounded-2xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-bold text-red-700 hover:bg-red-100"
-                          >
-                            Delete
-                          </button>
+
+                        <div className="grid gap-3 p-4">
+                          {group.rows.map((item) => (
+                            <div key={item.id} className="grid gap-4 rounded-3xl border border-white bg-white p-4 shadow-sm ring-1 ring-slate-200 sm:grid-cols-[auto_1fr_auto] sm:items-center">
+                              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-950 text-lg font-black text-white shadow-md">
+                                #{item.rank || "-"}
+                              </div>
+
+                              <div>
+                                <p className="text-[11px] font-black uppercase tracking-[0.2em] text-emerald-700">
+                                  Rank {item.rank || "-"} • Rating {item.rating ?? 0}
+                                </p>
+                                <p className="mt-1 text-lg font-black text-slate-950">{item.player_name}</p>
+                                <p className="text-sm font-bold uppercase tracking-[0.08em] text-slate-500">{item.team_name || "Team not set"}</p>
+                                <p className="mt-2 rounded-2xl bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-600 ring-1 ring-slate-200">
+                                  {item.stat_line || "No stat line"}
+                                </p>
+                              </div>
+
+                              <div className="flex gap-2 sm:justify-end">
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingPerformer({ ...item })}
+                                  className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-bold text-blue-700 hover:bg-blue-100"
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => deletePerformer(item.id)}
+                                  className="rounded-2xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-bold text-red-700 hover:bg-red-100"
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       </div>
                     ))}

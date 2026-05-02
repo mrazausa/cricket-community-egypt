@@ -145,6 +145,27 @@ type TournamentPointsRow = {
   is_active: boolean | null;
 };
 
+type MatchFilter = "all" | "upcoming" | "completed";
+type PerformerCategoryKey = "mvp" | "batsman" | "bowler" | "allrounder" | "keeper" | "fielder" | "pom" | "other";
+
+function normalizeMatchStatus(value: string | null | undefined) {
+  return (value || "upcoming").toLowerCase().replace(/[^a-z0-9]+/g, "_").trim();
+}
+
+function isCompletedMatch(match: MatchRow) {
+  const status = normalizeMatchStatus(match.status);
+  return status === "completed" || status === "complete" || status === "result" || status === "finished";
+}
+
+function isLiveMatch(match: MatchRow) {
+  const status = normalizeMatchStatus(match.status);
+  return status === "live" || status === "in_progress" || status === "ongoing";
+}
+
+function isUpcomingMatch(match: MatchRow) {
+  return !isCompletedMatch(match) && !isLiveMatch(match);
+}
+
 function formatTournamentStatus(status: string | null | undefined) {
   if (!status) return "Tournament";
   return status.charAt(0).toUpperCase() + status.slice(1);
@@ -350,18 +371,34 @@ function normalizeAwardCategory(value: string | null | undefined) {
     .trim();
 }
 
-function performerCategoryKey(row: TournamentTopPerformerRow) {
+function performerCategoryKey(row: TournamentTopPerformerRow): PerformerCategoryKey {
   const label = normalizeAwardCategory(row.award_category);
 
-  if (label.includes("batsman") || label.includes("batting") || label.includes("run")) {
+  if (label.includes("pom") || label.includes("potm") || label.includes("player of the match")) {
+    return "pom";
+  }
+
+  if (label.includes("wicket keeper") || label.includes("wicketkeeper") || label.includes("keeper") || label.includes("stumping")) {
+    return "keeper";
+  }
+
+  if (label.includes("fielder") || label.includes("fielding") || label.includes("catch") || label.includes("run out")) {
+    return "fielder";
+  }
+
+  if (label.includes("all rounder") || label.includes("allrounder") || label.includes("all round")) {
+    return "allrounder";
+  }
+
+  if (label.includes("batsman") || label.includes("batting") || label.includes("best bat") || label.includes("run")) {
     return "batsman";
   }
 
-  if (label.includes("bowler") || label.includes("bowling") || label.includes("wicket")) {
+  if (label.includes("bowler") || label.includes("bowling") || label.includes("best bowl") || label.includes("wicket")) {
     return "bowler";
   }
 
-  if (label.includes("mvp") || label.includes("best player") || label.includes("all round") || label.includes("allround")) {
+  if (label.includes("mvp") || label.includes("best player")) {
     return "mvp";
   }
 
@@ -381,40 +418,77 @@ function sortPerformers(a: TournamentTopPerformerRow, b: TournamentTopPerformerR
 }
 
 function getPerformerGroups(rows: TournamentTopPerformerRow[]) {
-  const mvp: TournamentTopPerformerRow[] = [];
-  const batsman: TournamentTopPerformerRow[] = [];
-  const bowler: TournamentTopPerformerRow[] = [];
+  const buckets: Record<PerformerCategoryKey, TournamentTopPerformerRow[]> = {
+    mvp: [],
+    batsman: [],
+    bowler: [],
+    allrounder: [],
+    keeper: [],
+    fielder: [],
+    pom: [],
+    other: [],
+  };
 
   rows.forEach((row) => {
-    const key = performerCategoryKey(row);
-    if (key === "batsman") batsman.push(row);
-    else if (key === "bowler") bowler.push(row);
-    else if (key === "mvp") mvp.push(row);
+    buckets[performerCategoryKey(row)].push(row);
   });
 
-  return [
+  const config: {
+    key: PerformerCategoryKey;
+    eyebrow: string;
+    title: string;
+    description: string;
+  }[] = [
     {
       key: "mvp",
       eyebrow: "Best Player / MVP",
       title: "MVP Race",
       description: "Overall tournament impact from batting, bowling and fielding contribution.",
-      rows: mvp.sort(sortPerformers).slice(0, 3),
     },
     {
       key: "batsman",
       eyebrow: "Best Batsman",
       title: "Batting Leaders",
       description: "Top batting performances based on runs, average and strike rate.",
-      rows: batsman.sort(sortPerformers).slice(0, 3),
     },
     {
       key: "bowler",
       eyebrow: "Best Bowler",
       title: "Bowling Leaders",
       description: "Top bowling performances based on wickets and bowling impact.",
-      rows: bowler.sort(sortPerformers).slice(0, 3),
+    },
+    {
+      key: "allrounder",
+      eyebrow: "Best All Rounder",
+      title: "All-Round Impact",
+      description: "Players contributing strongly across batting, bowling and fielding.",
+    },
+    {
+      key: "keeper",
+      eyebrow: "Best Wicket Keeper",
+      title: "Keeper Leaders",
+      description: "Wicket-keeper impact through catches, stumpings and dismissals.",
+    },
+    {
+      key: "fielder",
+      eyebrow: "Best Fielder",
+      title: "Fielding Leaders",
+      description: "Fielding impact through catches, run outs and overall fielding contribution.",
+    },
+    {
+      key: "pom",
+      eyebrow: "POM Leader",
+      title: "Player of the Match Leaders",
+      description: "Players leading the tournament in player-of-the-match awards.",
     },
   ];
+
+  return config
+    .map((group) => ({
+      ...group,
+      rows: buckets[group.key].sort(sortPerformers).slice(0, 3),
+    }))
+    .filter((group) => group.rows.length > 0);
 }
 
 function PerformerPodium({
@@ -547,6 +621,7 @@ export default function PublicTournamentPage() {
   const [nextMatch, setNextMatch] = useState<MatchRow | null>(null);
   const [latestResult, setLatestResult] = useState<MatchRow | null>(null);
   const [recentMatches, setRecentMatches] = useState<MatchRow[]>([]);
+  const [matchFilter, setMatchFilter] = useState<MatchFilter>("all");
   const [latestNews, setLatestNews] = useState<NewsRow[]>([]);
   const [loadingLiveBlocks, setLoadingLiveBlocks] = useState(true);
 
@@ -765,7 +840,7 @@ export default function PublicTournamentPage() {
         .eq("show_on_tournament_page", true)
         .order("sort_order", { ascending: true })
         .order("rank", { ascending: true })
-        .limit(12),
+        .limit(50),
     ]);
 
     setTeamRankings((teamRankingsRes.data || []) as TeamRankingRow[]);
@@ -784,8 +859,14 @@ export default function PublicTournamentPage() {
     return tournament?.slug ? `/tournaments/${tournament.slug}` : "/tournaments";
   }, [tournament?.slug]);
 
+  const filteredRecentMatches = useMemo(() => {
+    if (matchFilter === "completed") return recentMatches.filter(isCompletedMatch);
+    if (matchFilter === "upcoming") return recentMatches.filter(isUpcomingMatch);
+    return recentMatches;
+  }, [recentMatches, matchFilter]);
+
   const scheduleGroups = useMemo(() => {
-    const sorted = [...recentMatches].sort((a, b) => {
+    const sorted = [...filteredRecentMatches].sort((a, b) => {
       const am = a.match_number ?? 9999;
       const bm = b.match_number ?? 9999;
       if (am !== bm) return am - bm;
@@ -802,7 +883,7 @@ export default function PublicTournamentPage() {
     });
 
     return Array.from(map.entries()).map(([dateLabel, matches]) => ({ dateLabel, matches }));
-  }, [recentMatches]);
+  }, [filteredRecentMatches]);
 
   if (loadingTournament) {
     return (
@@ -1003,9 +1084,20 @@ export default function PublicTournamentPage() {
               description="Date-wise fixtures and completed results for this tournament. Controlled from Admin → Matches."
             />
             <div className="flex flex-wrap gap-2">
-              <a href="#schedule" className="rounded-full bg-slate-900 px-4 py-2 text-xs font-bold text-white">All</a>
-              <a href="#schedule" className="rounded-full border border-slate-200 px-4 py-2 text-xs font-bold text-slate-700">Upcoming</a>
-              <a href="#schedule" className="rounded-full border border-slate-200 px-4 py-2 text-xs font-bold text-slate-700">Completed</a>
+              {(["all", "upcoming", "completed"] as MatchFilter[]).map((filter) => (
+                <button
+                  key={filter}
+                  type="button"
+                  onClick={() => setMatchFilter(filter)}
+                  className={`rounded-full px-4 py-2 text-xs font-bold capitalize transition ${
+                    matchFilter === filter
+                      ? "bg-slate-900 text-white"
+                      : "border border-slate-200 text-slate-700 hover:bg-slate-50"
+                  }`}
+                >
+                  {filter}
+                </button>
+              ))}
             </div>
           </div>
           <div className="mt-6 space-y-6">
@@ -1025,7 +1117,7 @@ export default function PublicTournamentPage() {
                 </div>
               ))
             ) : (
-              <EmptyCard text="Matches will appear here once added from admin." />
+              <EmptyCard text={matchFilter === "all" ? "Matches will appear here once added from admin." : `No ${matchFilter} matches found for this tournament.`} />
             )}
           </div>
         </div>
@@ -1129,7 +1221,7 @@ export default function PublicTournamentPage() {
 
           <div className="mt-6 space-y-5">
             {loadingRankings ? (
-              ["MVP Race", "Batting Leaders", "Bowling Leaders"].map((item) => (
+              ["MVP Race", "Batting Leaders", "Bowling Leaders", "All-Round Impact", "Keeper Leaders", "Fielding Leaders", "POM Leaders"].map((item) => (
                 <div key={item} className="rounded-[28px] border border-slate-200 bg-slate-50 p-5">
                   <p className="text-xs font-bold uppercase tracking-[0.22em] text-emerald-700">{item}</p>
                   <div className="mt-5 grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
@@ -1238,8 +1330,8 @@ function getMatchDisplayNumber(match: MatchRow) {
 }
 
 function ScheduleMatchCard({ match, teams }: { match: MatchRow; teams: TeamInfo[] }) {
-  const isCompleted = (match.status || "").toLowerCase() === "completed";
-  const isLive = (match.status || "").toLowerCase() === "live";
+  const isCompleted = isCompletedMatch(match);
+  const isLive = isLiveMatch(match);
   const primaryLink = getMatchPrimaryLink(match);
 
   return (
