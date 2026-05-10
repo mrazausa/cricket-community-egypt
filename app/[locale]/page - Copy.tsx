@@ -1145,6 +1145,12 @@ try {
     <main className="min-h-screen bg-[#f4f7fb] text-slate-900">
       <SiteHeader />
 
+      <HomepageHeroTicker
+        snapshot={stumpsLiveSnapshot}
+        loading={loadingStumpsLive}
+      />
+
+
       <div className="flex flex-col">
         {homepageSettings.show_hero !== false && isBlockVisible("hero") && (
           <section
@@ -1167,11 +1173,6 @@ try {
                       : formatTournamentStatus(featuredTournament.status)}
                   </span>
                 </div>
-
-                <HomepageHeroTicker
-                  snapshot={stumpsLiveSnapshot}
-                  loading={loadingStumpsLive}
-                />
 
                 <HeroMediaBlock
                   youtubeUrl={homepageSettings.hero_youtube_url || ""}
@@ -2170,18 +2171,27 @@ function HomepageHeroTicker({
   }
 
   return (
-    <div className="mt-4 overflow-hidden rounded-2xl border border-emerald-300/20 bg-emerald-400/10 px-4 py-3 shadow-inner">
-      <style>{`
-        @keyframes cce-marquee {
-          0% { transform: translateX(100%); }
-          100% { transform: translateX(-100%); }
-        }
-      `}</style>
-      <div
-        className="whitespace-nowrap text-xs font-black uppercase tracking-[0.22em] text-emerald-100 sm:text-sm"
-        style={{ animation: "cce-marquee 24s linear infinite" }}
-      >
-        {message} &nbsp; • &nbsp; {message}
+    <div className="mx-auto mt-4 w-full max-w-7xl px-4 sm:px-6 lg:px-8">
+      <div className="overflow-hidden rounded-2xl border border-emerald-200 bg-white shadow-sm ring-1 ring-slate-100">
+        <style>{`
+          @keyframes cce-marquee {
+            0% { transform: translateX(100%); }
+            100% { transform: translateX(-100%); }
+          }
+        `}</style>
+        <div className="flex items-center gap-3 px-4 py-2.5">
+          <span className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] ${activeInnings ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-800"}`}>
+            {activeInnings ? "Live Score" : "Next Match"}
+          </span>
+          <div className="min-w-0 flex-1 overflow-hidden">
+            <div
+              className="whitespace-nowrap text-xs font-black uppercase tracking-[0.22em] text-slate-800 sm:text-sm"
+              style={{ animation: "cce-marquee 28s linear infinite" }}
+            >
+              {message} &nbsp; • &nbsp; {message}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
