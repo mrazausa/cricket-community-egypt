@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { usePathname } from "next/navigation";
+import { useParams } from "next/navigation";
 import SiteFooter from "@/components/layout/site-footer";
 import SiteHeader from "@/components/layout/site-header";
+import HeroLiveScorePanel from "@/components/home/HeroLiveScorePanel";
 import { supabase } from "@/utils/supabase/client";
+import LiveTournamentBlocks from "@/components/home/LiveTournamentBlocks";
 
 type TournamentRow = {
   id: string;
@@ -218,14 +220,9 @@ type StumpsScorecardData = {
   innnings?: StumpsScorecardInnings[];
 };
 
-type StumpsLiveMatchSnapshot = {
+type StumpsLiveSnapshot = {
   match: StumpsApiMatch;
   scorecard?: StumpsScorecardData | null;
-};
-
-type StumpsLiveSnapshot = {
-  liveMatches: StumpsLiveMatchSnapshot[];
-  upcomingMatches: StumpsApiMatch[];
   updatedAt: string;
 };
 
@@ -563,13 +560,27 @@ function getCommunityFallbackLabel(sectionType: string) {
 }
 
 export default function HomePage() {
-  const pathname = usePathname();
-  const locale = pathname?.split("/").filter(Boolean)[0] || "en";
+  const params = useParams();
+  const locale = String(params?.locale || "en");
+  const [heroLiveActive, setHeroLiveActive] = useState(false);
 
   const [tournaments, setTournaments] = useState<TournamentRow[]>([]);
   const [homepageSettings, setHomepageSettings] =
     useState<HomepageSettingsRow>(fallbackHomepageSettings);
   const [playersWatch, setPlayersWatch] = useState<HomepagePlayerWatch[]>([]);
+  useEffect(() => {
+    const handleHeroLiveStatus = (event: Event) => {
+      const detail = (event as CustomEvent<{ active?: boolean }>).detail;
+      setHeroLiveActive(Boolean(detail?.active));
+    };
+
+    window.addEventListener("cce-hero-live-status", handleHeroLiveStatus);
+
+    return () => {
+      window.removeEventListener("cce-hero-live-status", handleHeroLiveStatus);
+    };
+  }, []);
+
   const [quickLinks, setQuickLinks] = useState<HomepageQuickLink[]>([]);
   const [communityCards, setCommunityCards] = useState<HomepageCommunityCard[]>([]);
   const [homeBlocks, setHomeBlocks] = useState<Record<string, SitePageBlock>>({});
@@ -818,60 +829,65 @@ export default function HomePage() {
     try {
       setLoadingStumpsLive(true);
 
-      const summaryRes = await fetch("/api/stumps/live-summary", {
-        cache: "no-store",
+      const matchesRes = await fetch("/api/stumps/matches", { cache: "no-store" });
+
+const matchesText = await matchesRes.text();
+
+if (!matchesText) {
+  console.warn("STUMPS matches API returned empty response");
+  return;
+}
+
+let matchesJson: any = null;
+
+try {
+  matchesJson = JSON.parse(matchesText);
+} catch (err) {
+  console.warn("STUMPS matches API returned non-JSON:", matchesText);
+  return;
+}
+      const apiMatches = Array.isArray(matchesJson?.data)
+        ? (matchesJson.data as StumpsApiMatch[])
+        : [];
+
+      if (apiMatches.length === 0) {
+        setStumpsLiveSnapshot(null);
+        return;
+      }
+
+      const getMatchTimestamp = (match: StumpsApiMatch) => {
+        const raw = `${match.matchDate || ""} ${match.matchTime || "00:00"}`.trim();
+        const time = new Date(raw).getTime();
+        return Number.isFinite(time) ? time : 0;
+      };
+
+      const liveMatch = apiMatches.find((match) => {
+        const status = (match.matchStatus || "").toLowerCase();
+        return (
+          status.includes("live") ||
+          status.includes("progress") ||
+          status.includes("started") ||
+          status.includes("innings")
+        );
       });
 
-      const summaryText = await summaryRes.text();
+      const selectedMatch =
+        liveMatch ||
+        [...apiMatches].sort((a, b) => getMatchTimestamp(b) - getMatchTimestamp(a))[0];
 
-      if (!summaryText) {
-        setStumpsLiveSnapshot(null);
-        return;
+      let scorecard: StumpsScorecardData | null = null;
+
+      if (selectedMatch?.matchId) {
+        const scoreRes = await fetch(`/api/stumps/scorecard/${selectedMatch.matchId}`, {
+          cache: "no-store",
+        });
+        const scoreJson = await scoreRes.json();
+        scorecard = (scoreJson?.data || null) as StumpsScorecardData | null;
       }
-
-      let summaryJson: any = null;
-
-      try {
-        summaryJson = JSON.parse(summaryText);
-      } catch (err) {
-        console.warn("STUMPS live summary returned non-JSON:", summaryText);
-        setStumpsLiveSnapshot(null);
-        return;
-      }
-
-      const liveMatches = Array.isArray(summaryJson?.liveMatches)
-        ? (summaryJson.liveMatches as StumpsApiMatch[])
-        : [];
-
-      const upcomingMatches = Array.isArray(summaryJson?.upcomingMatches)
-        ? (summaryJson.upcomingMatches as StumpsApiMatch[])
-        : [];
-
-      const liveMatchesWithScorecards: StumpsLiveMatchSnapshot[] = await Promise.all(
-        liveMatches.slice(0, 2).map(async (match) => {
-          if (!match?.matchId) {
-            return { match, scorecard: null };
-          }
-
-          try {
-            const scoreRes = await fetch(`/api/stumps/scorecard/${match.matchId}`, {
-              cache: "no-store",
-            });
-            const scoreJson = await scoreRes.json();
-            return {
-              match,
-              scorecard: (scoreJson?.data || null) as StumpsScorecardData | null,
-            };
-          } catch (error) {
-            console.warn("STUMPS scorecard fetch failed:", match.matchId, error);
-            return { match, scorecard: null };
-          }
-        })
-      );
 
       setStumpsLiveSnapshot({
-        liveMatches: liveMatchesWithScorecards,
-        upcomingMatches,
+        match: selectedMatch,
+        scorecard,
         updatedAt: new Date().toLocaleTimeString(),
       });
     } catch (error) {
@@ -1149,10 +1165,12 @@ export default function HomePage() {
     <main className="min-h-screen bg-[#f4f7fb] text-slate-900">
       <SiteHeader />
 
-      <HomepageHeroTicker
-        snapshot={stumpsLiveSnapshot}
-        loading={loadingStumpsLive}
-      />
+      {!heroLiveActive && (
+        <HomepageHeroTicker
+          snapshot={stumpsLiveSnapshot}
+          loading={loadingStumpsLive}
+        />
+      )}
 
 
       <div className="flex flex-col">
@@ -1161,7 +1179,7 @@ export default function HomePage() {
             className="mx-auto w-full max-w-7xl px-4 py-5 sm:px-6 lg:px-8 lg:py-8"
             style={{ order: blockOrder("hero", homepageSettings.hero_order ?? 1) }}
           >
-            <div className="grid gap-5 lg:grid-cols-[1.65fr_0.85fr] lg:items-stretch">
+            <div className={`grid gap-5 lg:items-stretch ${heroLiveActive ? "lg:grid-cols-1" : "lg:grid-cols-[1.65fr_0.85fr]"}`}>
               <div className="flex min-h-[560px] flex-col overflow-hidden rounded-[30px] bg-gradient-to-br from-slate-950 via-[#02103a] to-emerald-900 p-6 text-white shadow-2xl sm:p-8 lg:h-[640px] lg:p-7">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="rounded-full bg-emerald-400/15 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-emerald-200">
@@ -1178,10 +1196,9 @@ export default function HomePage() {
                   </span>
                 </div>
 
-                <HeroMediaBlock
-                  youtubeUrl={homepageSettings.hero_youtube_url || ""}
-                  autoplay={homepageSettings.hero_youtube_autoplay === true}
-                  imageUrl={heroPrimaryImage}
+                <HeroLiveScorePanel
+                  locale={locale}
+                  fallbackImageUrl={heroPrimaryImage}
                   title={heroTitle}
                 />
 
@@ -1282,18 +1299,19 @@ export default function HomePage() {
                 </div>
               </div>
 
-              <HomepageLiveUpdatePanel
-                activeLiveUpdate={activeLiveUpdate}
-                liveUpdates={liveUpdates}
-                currentIndex={currentIndex}
-                setCurrentIndex={setCurrentIndex}
-                featuredVisual={homepageFeaturedVisual}
-                featuredTournament={featuredTournament}
-                homepageSettings={homepageSettings}
-                stumpsLiveSnapshot={stumpsLiveSnapshot}
-                loadingStumpsLive={loadingStumpsLive}
-                locale={locale}
-              />
+              {!heroLiveActive && (
+                <HomepageLiveUpdatePanel
+                  activeLiveUpdate={activeLiveUpdate}
+                  liveUpdates={liveUpdates}
+                  currentIndex={currentIndex}
+                  setCurrentIndex={setCurrentIndex}
+                  featuredVisual={homepageFeaturedVisual}
+                  featuredTournament={featuredTournament}
+                  homepageSettings={homepageSettings}
+                  stumpsLiveSnapshot={stumpsLiveSnapshot}
+                  loadingStumpsLive={loadingStumpsLive}
+                />
+              )}
             </div>
           </section>
         )}
@@ -1423,73 +1441,8 @@ export default function HomePage() {
                   </div>
                 </div>
                 )}
-
-                {showMatchCenterBlock && (
-                <div>
-                  <div className="mb-4 flex items-end justify-between gap-4">
-                    <div>
-                      <p className="text-xs font-bold uppercase tracking-[0.24em] text-emerald-700">
-                        Live Tournament Blocks
-                      </p>
-                      <h3 className="mt-1 text-2xl font-black tracking-tight text-slate-950">
-                        Match Center
-                      </h3>
-                    </div>
-                  </div>
-
-                  <div className="rounded-[2rem] border border-slate-200 bg-white p-4 shadow-sm sm:p-5 lg:p-6">
-                    <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-                      <div>
-                        <p className="text-xs font-bold uppercase tracking-[0.22em] text-emerald-700">
-                          Quick Match View
-                        </p>
-                        <p className="mt-1 text-sm font-semibold text-slate-500">
-                          Showing latest 2 upcoming and latest 2 completed matches.
-                        </p>
-                      </div>
-                      <a
-                        href={featuredTournament?.slug ? `/tournaments/${featuredTournament.slug}#schedule` : "/tournaments"}
-                        className="inline-flex h-10 items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-900 transition hover:border-emerald-300 hover:text-emerald-700"
-                      >
-                        View Full Match Center →
-                      </a>
-                    </div>
-
-                    <StumpsHomepageLiveCard
-                      snapshot={stumpsLiveSnapshot}
-                      loading={loadingStumpsLive}
-                      locale={locale}
-                    />
-
-                    {loadingLiveBlocks ? (
-                      <EmptyCard text="Loading live tournament updates..." />
-                    ) : (
-                      <div className="grid gap-5 lg:grid-cols-2">
-                        <MatchCarousel
-                          title="Upcoming Matches"
-                          badge="Next 2"
-                          badgeClass="bg-emerald-100 text-emerald-700"
-                          emptyText="No upcoming match added yet."
-                          matches={upcomingMatches.slice(0, 2)}
-                          teams={tournamentTeams}
-                          type="upcoming"
-                          tournamentSlug={featuredTournament?.slug || ""}
-                        />
-
-                        <MatchCarousel
-                          title="Completed Results"
-                          badge="Latest 2"
-                          badgeClass="bg-slate-100 text-slate-700"
-                          emptyText="No completed match result yet."
-                          matches={completedMatches.slice(0, 2)}
-                          teams={tournamentTeams}
-                          type="completed"
-                          tournamentSlug={featuredTournament?.slug || ""}
-                        />
-                      </div>
-                    )}
-                  </div>
-                </div>
+                {showMatchCenterBlock && !heroLiveActive && (
+                  <LiveTournamentBlocks locale={locale} />
                 )}
               </div>
             </div>
@@ -2114,41 +2067,6 @@ function hasInfoBoxes(update: any) {
 }
 
 
-function isStumpsMatchLive(match?: StumpsApiMatch | null, scorecard?: StumpsScorecardData | null) {
-  const status = (scorecard?.matchStatus || match?.matchStatus || "").toLowerCase();
-  return (
-    status.includes("live") ||
-    status.includes("progress") ||
-    status.includes("started") ||
-    status.includes("innings")
-  );
-}
-
-function getStumpsTeamLine(match?: StumpsApiMatch | null) {
-  const teams = match?.teams || [];
-  const teamLine = teams.map((team) => team.teamName).filter(Boolean).join(" vs ");
-  return teamLine || match?.matchTitle || "Match";
-}
-
-function getStumpsMatchStart(match?: StumpsApiMatch | null) {
-  if (!match?.matchDate) return null;
-  const rawTime = (match.matchTime || "00:00").trim();
-  const normalizedTime = rawTime.length === 5 ? `${rawTime}:00` : rawTime;
-  const date = new Date(`${match.matchDate}T${normalizedTime}`);
-  return Number.isNaN(date.getTime()) ? null : date;
-}
-
-function formatStumpsCountdown(msLeft: number) {
-  const totalSeconds = Math.max(0, Math.floor(msLeft / 1000));
-  const days = Math.floor(totalSeconds / 86400);
-  const hours = Math.floor((totalSeconds % 86400) / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-
-  if (days > 0) return `${days}d ${hours}h ${minutes}m ${seconds}s`;
-  return `${String(hours).padStart(2, "0")}h ${String(minutes).padStart(2, "0")}m ${String(seconds).padStart(2, "0")}s`;
-}
-
 function HomepageHeroTicker({
   snapshot,
   loading,
@@ -2163,34 +2081,52 @@ function HomepageHeroTicker({
     return () => clearInterval(timer);
   }, []);
 
-  const liveMatches = snapshot?.liveMatches || [];
-  const nextMatch = snapshot?.upcomingMatches?.[0] || null;
-  const firstLive = liveMatches[0] || null;
-  const firstLiveInnings = firstLive?.scorecard?.innnings || [];
-  const activeInnings = firstLiveInnings[firstLiveInnings.length - 1];
+  const innings = snapshot?.scorecard?.innnings || [];
+  const activeInnings = innings[innings.length - 1];
+  const match = snapshot?.match;
+  const teams = match?.teams || [];
+  const teamLine = teams.map((team) => team.teamName).filter(Boolean).join(" vs ");
 
-  const matchStart = getStumpsMatchStart(nextMatch);
+  const getMatchStart = () => {
+    if (!match?.matchDate) return null;
+    const rawTime = (match.matchTime || "00:00").trim();
+    const normalizedTime = rawTime.length === 5 ? `${rawTime}:00` : rawTime;
+    const date = new Date(`${match.matchDate}T${normalizedTime}`);
+    return Number.isNaN(date.getTime()) ? null : date;
+  };
+
+  const matchStart = getMatchStart();
   const msLeft = matchStart ? matchStart.getTime() - now : 0;
   const hasCountdown = !!matchStart && msLeft > 0;
 
+  const formatCountdown = () => {
+    const totalSeconds = Math.max(0, Math.floor(msLeft / 1000));
+    const days = Math.floor(totalSeconds / 86400);
+    const hours = Math.floor((totalSeconds % 86400) / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+
+    if (days > 0) return `${days}d ${hours}h ${minutes}m ${seconds}s`;
+    return `${String(hours).padStart(2, "0")}h ${String(minutes).padStart(2, "0")}m ${String(seconds).padStart(2, "0")}s`;
+  };
+
+  const status = (snapshot?.scorecard?.matchStatus || match?.matchStatus || "").toLowerCase();
+  const isLive =
+    status.includes("live") ||
+    status.includes("progress") ||
+    status.includes("started") ||
+    status.includes("innings");
+
   let message = "CONNECTING TO STUMPS LIVE FEED • LIVE SCORE WILL APPEAR HERE WHEN MATCH STARTS";
 
-  if (loading && !snapshot) {
+  if (loading) {
     message = "CONNECTING TO STUMPS LIVE FEED • PLEASE WAIT";
-  } else if (liveMatches.length > 1) {
-    message = `LIVE NOW • ${liveMatches.length} matches are live • Open live scorecards for ball-by-ball updates`;
-  } else if (activeInnings && firstLive) {
-    message = `LIVE NOW • ${activeInnings.battingTeamName || "Batting Team"} ${activeInnings.teamScore ?? 0}/${activeInnings.wickets ?? 0} (${activeInnings.overs || "0"} ov) • ${firstLive.scorecard?.matchResult || "Open full live scorecard for details"}`;
-  } else if (firstLive) {
-    const teams = firstLive.match?.teams || [];
-    const teamScoreLine = teams
-      .map((team) => `${team.teamName || "Team"} ${team.teamScore || ""}`.trim())
-      .join(" • ");
-    message = `LIVE NOW • ${teamScoreLine || getStumpsTeamLine(firstLive.match)} • Open full live scorecard`;
-  } else if (hasCountdown && nextMatch) {
-    message = `NEXT MATCH • ${getStumpsTeamLine(nextMatch)} starts in ${formatStumpsCountdown(msLeft)} • ${nextMatch.matchDate || "Date TBA"} • ${nextMatch.matchTime || "Time TBA"}`;
-  } else if (nextMatch) {
-    message = `NEXT MATCH • ${getStumpsTeamLine(nextMatch)} • ${nextMatch.matchDate || "Date TBA"} • ${nextMatch.matchTime || "Time TBA"}`;
+  } else if (activeInnings) {
+    message = `${isLive ? "LIVE NOW" : "SCORE UPDATE"} • ${activeInnings.battingTeamName || "Batting Team"} ${activeInnings.teamScore ?? 0}/${activeInnings.wickets ?? 0} (${activeInnings.overs || "0"} ov) • ${snapshot?.scorecard?.matchResult || "Open full live scorecard for details"}`;
+  } else if (hasCountdown) {
+    message = `NEXT MATCH • ${teamLine || match?.matchTitle || "Match"} begins in ${formatCountdown()} • ${match?.matchDate || "Date TBA"} • ${match?.matchTime || "Time TBA"} • Live score opens when match starts`;
+  } else if (match) {
+    message = `NEXT MATCH • ${teamLine || match.matchTitle || "Match"} • ${match.matchDate || "Date TBA"} • ${match.matchTime || "Time TBA"} • Open live scorecard when match begins`;
   }
 
   return (
@@ -2203,8 +2139,8 @@ function HomepageHeroTicker({
           }
         `}</style>
         <div className="flex items-center gap-3 px-4 py-2.5">
-          <span className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] ${liveMatches.length > 0 ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-800"}`}>
-            {liveMatches.length > 0 ? "Live Score" : "Next Match"}
+          <span className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] ${activeInnings ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-800"}`}>
+            {activeInnings ? "Live Score" : "Next Match"}
           </span>
           <div className="min-w-0 flex-1 overflow-hidden">
             <div
@@ -2230,7 +2166,6 @@ function HomepageLiveUpdatePanel({
   homepageSettings,
   stumpsLiveSnapshot,
   loadingStumpsLive,
-  locale,
 }: {
   activeLiveUpdate: any | null;
   liveUpdates: any[];
@@ -2241,7 +2176,6 @@ function HomepageLiveUpdatePanel({
   homepageSettings: HomepageSettingsRow;
   stumpsLiveSnapshot: StumpsLiveSnapshot | null;
   loadingStumpsLive: boolean;
-  locale: string;
 }) {
   const update = activeLiveUpdate || featuredVisual;
   const title = update?.title || featuredTournament.title || "Tournament Snapshot";
@@ -2251,7 +2185,8 @@ function HomepageLiveUpdatePanel({
   const showAction = activeLiveUpdate
     ? activeLiveUpdate.show_action_card !== false
     : true;
-  const shouldShowLiveScore = (stumpsLiveSnapshot?.liveMatches || []).length > 0;
+  const liveInnings = stumpsLiveSnapshot?.scorecard?.innnings || [];
+  const shouldShowLiveScore = liveInnings.length > 0;
 
   if (!update) {
     return (
@@ -2304,7 +2239,6 @@ function HomepageLiveUpdatePanel({
           <HomepageHeroLiveScore
             snapshot={stumpsLiveSnapshot}
             loading={loadingStumpsLive}
-            locale={locale}
           />
         ) : imageUrl ? (
           <img
@@ -2434,26 +2368,21 @@ function QuickLink({
 function HomepageHeroLiveScore({
   snapshot,
   loading,
-  locale,
 }: {
   snapshot: StumpsLiveSnapshot | null;
   loading: boolean;
-  locale: string;
 }) {
-  const liveMatches = snapshot?.liveMatches || [];
+  const match = snapshot?.match || null;
+  const scorecard = snapshot?.scorecard || null;
+  const innings = scorecard?.innnings || [];
+  const matchId = match?.matchId || scorecard?.matchId || "";
+  const liveHref = matchId ? `/en/live/${matchId}` : "/tournaments";
+  const result = scorecard?.matchResult || match?.matchResult || "Live score will update automatically.";
 
   if (loading && !snapshot) {
     return (
       <div className="flex h-full w-full items-center justify-center p-6 text-center text-sm font-bold text-slate-500">
         Loading live score...
-      </div>
-    );
-  }
-
-  if (liveMatches.length === 0) {
-    return (
-      <div className="flex h-full w-full items-center justify-center p-6 text-center text-sm font-bold text-slate-500">
-        No live match right now.
       </div>
     );
   }
@@ -2467,7 +2396,7 @@ function HomepageHeroLiveScore({
               Live Score Feed
             </p>
             <h3 className="mt-2 line-clamp-2 text-2xl font-black leading-tight sm:text-3xl">
-              {liveMatches.length === 1 ? getStumpsTeamLine(liveMatches[0].match) : `${liveMatches.length} Live Matches`}
+              {match?.matchTitle || match?.tournamentName || "STUMPS Live Match"}
             </h3>
           </div>
           <span className="shrink-0 rounded-full bg-red-500 px-3 py-1 text-[11px] font-black uppercase tracking-[0.16em] text-white shadow">
@@ -2476,64 +2405,42 @@ function HomepageHeroLiveScore({
         </div>
 
         <div className="mt-5 grid gap-3">
-          {liveMatches.slice(0, 2).map((item) => {
-            const match = item.match;
-            const innings = item.scorecard?.innnings || [];
-            const activeInnings = innings[innings.length - 1];
-            const teams = match.teams || [];
-            const matchId = match.matchId || item.scorecard?.matchId || "";
-            const liveHref = matchId ? `/${locale}/live/${matchId}` : `/${locale}/tournaments`;
-
-            return (
-              <a
-                key={matchId || getStumpsTeamLine(match)}
-                href={liveHref}
-                className="block rounded-2xl border border-white/10 bg-white/10 p-4 shadow-sm transition hover:bg-white/15"
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-black text-white sm:text-base">
-                      {getStumpsTeamLine(match)}
-                    </p>
-                    <p className="mt-1 text-xs font-semibold text-slate-300">
-                      {match.matchStatus || item.scorecard?.matchStatus || "Live"}
-                    </p>
-                  </div>
-                  <span className="shrink-0 rounded-full bg-white px-3 py-1 text-[10px] font-black uppercase text-slate-950">
-                    Open →
-                  </span>
-                </div>
-
-                {activeInnings ? (
-                  <p className="mt-3 text-3xl font-black text-emerald-300 sm:text-4xl">
-                    {activeInnings.battingTeamName || "Team"} {activeInnings.teamScore ?? 0}/{activeInnings.wickets ?? 0}
-                    <span className="ml-2 text-sm font-bold text-slate-300">
-                      ({activeInnings.overs || "0"} ov)
-                    </span>
+          {innings.slice(0, 2).map((item, index) => (
+            <div
+              key={`${item.battingTeamName}-${index}`}
+              className="rounded-2xl border border-white/10 bg-white/10 p-4 shadow-sm"
+            >
+              <div className="flex items-center justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-black text-white sm:text-base">
+                    {item.battingTeamName || "Team"}
                   </p>
-                ) : (
-                  <div className="mt-3 grid gap-2">
-                    {teams.slice(0, 2).map((team, index) => (
-                      <div key={`${team.teamName}-${index}`} className="flex justify-between gap-3 text-sm">
-                        <span className="truncate font-bold text-white">{team.teamName || "Team"}</span>
-                        <span className="font-black text-emerald-300">{team.teamScore || "Live"}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </a>
-            );
-          })}
+                  <p className="mt-1 text-xs font-semibold text-slate-300">
+                    Overs: {item.overs || "0"}
+                  </p>
+                </div>
+                <p className="shrink-0 text-3xl font-black text-emerald-300 sm:text-4xl">
+                  {item.teamScore ?? 0}/{item.wickets ?? 0}
+                </p>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 
       <div className="mt-5 border-t border-white/10 pt-4">
         <p className="line-clamp-2 text-sm font-semibold leading-6 text-slate-200">
-          Auto-synced from STUMPS.
+          {result}
           {snapshot?.updatedAt ? (
             <span className="text-slate-400"> • Updated {snapshot.updatedAt}</span>
           ) : null}
         </p>
+        <a
+          href={liveHref}
+          className="mt-4 inline-flex h-11 items-center justify-center rounded-2xl bg-emerald-400 px-5 text-sm font-black text-slate-950 transition hover:bg-emerald-300"
+        >
+          Open Live Scorecard →
+        </a>
       </div>
     </div>
   );
@@ -2542,13 +2449,29 @@ function HomepageHeroLiveScore({
 function StumpsHomepageLiveCard({
   snapshot,
   loading,
-  locale,
 }: {
   snapshot: StumpsLiveSnapshot | null;
   loading: boolean;
-  locale: string;
 }) {
-  const liveMatches = snapshot?.liveMatches || [];
+  const match = snapshot?.match || null;
+  const scorecard = snapshot?.scorecard || null;
+  const innings = scorecard?.innnings || [];
+  const teamScores = innings.length
+    ? innings.map((item) => ({
+        name: item.battingTeamName || "Team",
+        score: `${item.teamScore ?? 0}/${item.wickets ?? 0}`,
+        overs: item.overs || "0",
+      }))
+    : (match?.teams || []).map((team) => ({
+        name: team.teamName || "Team",
+        score: team.teamScore || "Yet to bat",
+        overs: "",
+      }));
+
+  const status = scorecard?.matchStatus || match?.matchStatus || "Live";
+  const result = scorecard?.matchResult || match?.matchResult || "Live score will update automatically.";
+  const matchId = match?.matchId || scorecard?.matchId || "";
+  const liveHref = matchId ? `/en/live/${matchId}` : "/tournaments";
 
   if (loading && !snapshot) {
     return (
@@ -2558,14 +2481,14 @@ function StumpsHomepageLiveCard({
     );
   }
 
-  if (liveMatches.length === 0) {
+  if (!snapshot || !match) {
     return null;
   }
 
   return (
     <div className="mb-6 overflow-hidden rounded-[1.75rem] border border-emerald-200 bg-gradient-to-r from-slate-950 via-slate-900 to-emerald-900 p-4 text-white shadow-lg">
-      <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <span className="inline-flex rounded-full bg-red-500 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-white shadow-sm">
               Live
@@ -2574,75 +2497,45 @@ function StumpsHomepageLiveCard({
               STUMPS Score Feed
             </span>
           </div>
-          <h4 className="mt-3 text-xl font-black sm:text-2xl">
-            {liveMatches.length === 1 ? "Live Match Center" : `${liveMatches.length} Live Matches`}
+          <h4 className="mt-3 truncate text-xl font-black sm:text-2xl">
+            {match.tournamentName || "Live Match Center"}
           </h4>
+          <p className="mt-1 text-sm text-slate-300">
+            {match.matchTitle || match.matchFormat || "Live scorecard"} • {status}
+          </p>
         </div>
-        {snapshot?.updatedAt ? (
-          <p className="text-xs font-bold text-slate-300">Updated {snapshot.updatedAt}</p>
-        ) : null}
+
+        <div className="grid gap-3 sm:grid-cols-2 lg:min-w-[420px]">
+          {teamScores.slice(0, 2).map((team, index) => (
+            <div
+              key={`${team.name}-${index}`}
+              className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3"
+            >
+              <p className="truncate text-xs font-bold uppercase tracking-[0.18em] text-emerald-200">
+                {team.name}
+              </p>
+              <p className="mt-1 text-2xl font-black text-white">{team.score}</p>
+              {team.overs ? (
+                <p className="text-xs font-semibold text-slate-300">Overs: {team.overs}</p>
+              ) : null}
+            </div>
+          ))}
+        </div>
       </div>
 
-      <div className="grid gap-3 lg:grid-cols-2">
-        {liveMatches.slice(0, 2).map((item) => {
-          const match = item.match;
-          const scorecard = item.scorecard || null;
-          const innings = scorecard?.innnings || [];
-          const activeInnings = innings[innings.length - 1];
-          const teamScores = activeInnings
-            ? [
-                {
-                  name: activeInnings.battingTeamName || "Team",
-                  score: `${activeInnings.teamScore ?? 0}/${activeInnings.wickets ?? 0}`,
-                  overs: activeInnings.overs || "0",
-                },
-              ]
-            : (match.teams || []).slice(0, 2).map((team) => ({
-                name: team.teamName || "Team",
-                score: team.teamScore || "Live",
-                overs: "",
-              }));
-
-          const status = scorecard?.matchStatus || match.matchStatus || "Live";
-          const result = scorecard?.matchResult || match.matchResult || "Live score will update automatically.";
-          const matchId = match.matchId || scorecard?.matchId || "";
-          const liveHref = matchId ? `/${locale}/live/${matchId}` : `/${locale}/tournaments`;
-
-          return (
-            <div key={matchId || getStumpsTeamLine(match)} className="rounded-2xl border border-white/10 bg-white/10 p-4">
-              <p className="text-[11px] font-black uppercase tracking-[0.18em] text-emerald-200">
-                {status}
-              </p>
-              <h5 className="mt-2 line-clamp-1 text-lg font-black text-white">
-                {getStumpsTeamLine(match)}
-              </h5>
-
-              <div className="mt-3 grid gap-2">
-                {teamScores.map((team, index) => (
-                  <div key={`${team.name}-${index}`} className="rounded-xl border border-white/10 bg-white/10 px-3 py-2">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="truncate text-sm font-bold text-white">{team.name}</p>
-                      <p className="shrink-0 text-xl font-black text-emerald-300">{team.score}</p>
-                    </div>
-                    {team.overs ? (
-                      <p className="mt-1 text-xs font-semibold text-slate-300">Overs: {team.overs}</p>
-                    ) : null}
-                  </div>
-                ))}
-              </div>
-
-              <p className="mt-3 line-clamp-2 text-xs font-semibold leading-5 text-slate-300">
-                {result}
-              </p>
-              <a
-                href={liveHref}
-                className="mt-3 inline-flex h-10 items-center justify-center rounded-2xl bg-white px-4 text-sm font-black text-slate-950 transition hover:bg-emerald-100"
-              >
-                Open Live →
-              </a>
-            </div>
-          );
-        })}
+      <div className="mt-4 flex flex-col gap-3 border-t border-white/10 pt-4 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-sm font-semibold text-slate-200">
+          {result}
+          {snapshot.updatedAt ? (
+            <span className="text-slate-400"> • Updated {snapshot.updatedAt}</span>
+          ) : null}
+        </p>
+        <a
+          href={liveHref}
+          className="inline-flex h-10 shrink-0 items-center justify-center rounded-2xl bg-white px-4 text-sm font-black text-slate-950 transition hover:bg-emerald-100"
+        >
+          Open Full Live Scorecard →
+        </a>
       </div>
     </div>
   );

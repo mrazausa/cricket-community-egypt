@@ -16,13 +16,6 @@ function normalizeStatus(status: unknown) {
   return String(status || "").trim().toLowerCase();
 }
 
-function normalizeName(value: unknown) {
-  return String(value || "")
-    .toLowerCase()
-    .replace(/&/g, "and")
-    .replace(/[^a-z0-9]/g, "");
-}
-
 function normalizeDateTime(match: AnyMatch) {
   const date = match.matchDate || match.date || match.startDate || "";
   const time = match.matchTime || match.time || match.startTime || "";
@@ -44,171 +37,8 @@ function getMatchId(match: AnyMatch) {
   );
 }
 
-function pickFirstString(row: AnyMatch, keys: string[]) {
-  for (const key of keys) {
-    const value = row?.[key];
-    if (typeof value === "string" && value.trim()) return value.trim();
-  }
-  return "";
-}
-
-async function fetchTeamLogoMap() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseKey =
-    process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-  const logoMap = new Map<string, string>();
-
-  if (!supabaseUrl || !supabaseKey) {
-    return {
-      logoMap,
-      source: "missing-supabase-env",
-      rows: 0,
-      error: "Missing Supabase URL/key",
-    };
-  }
-
-  try {
-    const res = await fetch(`${supabaseUrl}/rest/v1/teams?select=*`, {
-      headers: {
-        apikey: supabaseKey,
-        Authorization: `Bearer ${supabaseKey}`,
-      },
-      cache: "no-store",
-    });
-
-    const text = await res.text();
-
-    if (!res.ok) {
-      return {
-        logoMap,
-        source: "teams-query-failed",
-        rows: 0,
-        error: text,
-      };
-    }
-
-    let rows: AnyMatch[] = [];
-
-    try {
-      rows = JSON.parse(text);
-    } catch {
-      rows = [];
-    }
-
-    for (const row of rows || []) {
-      const logo = pickFirstString(row, [
-        "logo_url",
-        "team_logo_url",
-        "team_logo",
-        "logo",
-        "image_url",
-        "photo_url",
-        "avatar_url",
-      ]);
-
-      const names = [
-        row.id,
-        row.team_id,
-        row.stumps_team_id,
-        row.name,
-        row.team_name,
-        row.title,
-        row.short_name,
-      ];
-
-      if (!logo) continue;
-
-      for (const name of names) {
-        const normalized = normalizeName(name);
-        if (normalized) logoMap.set(normalized, logo);
-      }
-    }
-
-    return {
-      logoMap,
-      source: logoMap.size > 0 ? "supabase-teams" : "teams-no-logo-columns-matched",
-      rows: rows.length,
-      error: "",
-    };
-  } catch (error: any) {
-    return {
-      logoMap,
-      source: "teams-query-error",
-      rows: 0,
-      error: error?.message || "Unknown Supabase teams query error",
-    };
-  }
-}
-
-function enrichTeamWithLogo(
-  team: any,
-  fallback: string,
-  logoMap: Map<string, string>
-) {
-  if (!team) {
-    return {
-      teamId: "",
-      teamName: fallback,
-      teamScore: "",
-      teamLogo: "",
-    };
-  }
-
-  if (typeof team === "string") {
-    return {
-      teamId: "",
-      teamName: team,
-      teamScore: "",
-      teamLogo: logoMap.get(normalizeName(team)) || "",
-    };
-  }
-
-  const teamId = team.teamId || team.id || team.team_id || "";
-  const teamName =
-    team.teamName ||
-    team.name ||
-    team.team_name ||
-    team.title ||
-    team.shortName ||
-    team.short_name ||
-    fallback;
-
-  const existingLogo =
-    team.teamLogo ||
-    team.logo ||
-    team.logoUrl ||
-    team.logo_url ||
-    team.team_logo_url ||
-    team.team_logo ||
-    team.image_url ||
-    "";
-
-  const mappedLogo =
-    logoMap.get(normalizeName(teamId)) ||
-    logoMap.get(normalizeName(teamName)) ||
-    "";
-
-  return {
-    teamId,
-    teamName,
-    teamScore:
-      team.teamScore ||
-      team.score ||
-      team.currentScore ||
-      team.runs ||
-      "",
-    teamLogo: existingLogo || mappedLogo,
-  };
-}
-
-function getTeams(match: AnyMatch, logoMap: Map<string, string>) {
-  if (Array.isArray(match.teams)) {
-    return match.teams.map((team: any, index: number) =>
-      enrichTeamWithLogo(team, index === 0 ? "Team A" : "Team B", logoMap)
-    );
-  }
+function getTeams(match: AnyMatch) {
+  if (Array.isArray(match.teams)) return match.teams;
 
   const teamA =
     match.teamA ||
@@ -226,14 +56,37 @@ function getTeams(match: AnyMatch, logoMap: Map<string, string>) {
     match.teamTwo ||
     null;
 
-  return [
-    enrichTeamWithLogo(teamA, "Team A", logoMap),
-    enrichTeamWithLogo(teamB, "Team B", logoMap),
-  ];
+  const normalizeTeam = (team: any, fallback: string) => {
+    if (!team) return { teamName: fallback, teamScore: "" };
+    if (typeof team === "string") return { teamName: team, teamScore: "" };
+
+    return {
+      teamId: team.teamId || team.id || "",
+      teamName:
+        team.teamName ||
+        team.name ||
+        team.title ||
+        team.shortName ||
+        fallback,
+      teamScore:
+        team.teamScore ||
+        team.score ||
+        team.currentScore ||
+        team.runs ||
+        "",
+      teamLogo:
+        team.teamLogo ||
+        team.logo ||
+        team.logoUrl ||
+        "",
+    };
+  };
+
+  return [normalizeTeam(teamA, "Team A"), normalizeTeam(teamB, "Team B")];
 }
 
-function simplifyMatch(match: AnyMatch, logoMap: Map<string, string>) {
-  const teams = getTeams(match, logoMap);
+function simplifyMatch(match: AnyMatch) {
+  const teams = getTeams(match);
   const matchId = getMatchId(match);
 
   return {
@@ -316,18 +169,18 @@ export async function GET() {
       );
     }
 
-    const [stumpsRes, logoInfo] = await Promise.all([
-      fetch(`https://api.stumpsapp.com/clubs/id/${clubId}/matches`, {
+    const res = await fetch(
+      `https://api.stumpsapp.com/clubs/id/${clubId}/matches`,
+      {
         headers: {
           apiKey,
           Token: token,
         },
         cache: "no-store",
-      }),
-      fetchTeamLogoMap(),
-    ]);
+      }
+    );
 
-    const rawText = await stumpsRes.text();
+    const rawText = await res.text();
 
     let payload: any = null;
     try {
@@ -336,9 +189,7 @@ export async function GET() {
       payload = rawText;
     }
 
-    const allMatches = asArray(payload)
-      .map((match) => simplifyMatch(match, logoInfo.logoMap))
-      .filter((m) => m.matchId);
+    const allMatches = asArray(payload).map(simplifyMatch).filter((m) => m.matchId);
 
     const liveMatches = allMatches.filter(isLive);
 
@@ -359,21 +210,14 @@ export async function GET() {
       });
 
     return NextResponse.json({
-      success: stumpsRes.ok,
-      status: stumpsRes.status,
+      success: res.ok,
+      status: res.status,
       updatedAt: new Date().toISOString(),
-      logoSource: logoInfo.source,
-      logoDebug: {
-        rows: logoInfo.rows,
-        logos: logoInfo.logoMap.size,
-        error: logoInfo.error,
-      },
       counts: {
         all: allMatches.length,
         live: liveMatches.length,
         upcoming: upcomingMatches.length,
         completed: completedMatches.length,
-        logos: logoInfo.logoMap.size,
       },
       liveMatches,
       upcomingMatches,

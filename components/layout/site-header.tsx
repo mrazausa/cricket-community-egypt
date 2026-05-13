@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import { supabase } from "@/utils/supabase/client";
 
 type HeaderSettings = {
@@ -44,7 +45,57 @@ const fallbackPublicNav: MenuItem[] = [
   { menu_key: "players", label: "Players", href: "/players", is_visible: false, sort_order: 5, is_button: false, is_admin_only: false },
 ];
 
+
+const headerTranslations = {
+  en: {
+    home: "Home",
+    tournaments: "Tournaments",
+    rankings: "Rankings",
+    teams: "Teams",
+    players: "Players",
+    register: "Register",
+    registerTeam: "Register Team",
+    registerPlayer: "Register Player",
+    dashboard: "My Dashboard",
+    logout: "Logout",
+    loginJoin: "Login / Join",
+    menu: "Menu",
+  },
+  ar: {
+    home: "الرئيسية",
+    tournaments: "البطولات",
+    rankings: "التصنيفات",
+    teams: "الفرق",
+    players: "اللاعبون",
+    register: "التسجيل",
+    registerTeam: "تسجيل فريق",
+    registerPlayer: "تسجيل لاعب",
+    dashboard: "لوحة التحكم",
+    logout: "تسجيل الخروج",
+    loginJoin: "تسجيل الدخول / الانضمام",
+    menu: "القائمة",
+  },
+} as const;
+
+type HeaderLocale = keyof typeof headerTranslations;
+
 export default function SiteHeader() {
+  const pathname = usePathname();
+  const locale: HeaderLocale = pathname?.startsWith("/ar") ? "ar" : "en";
+  const t = headerTranslations[locale];
+
+  function hrefFor(href: string) {
+    if (!href || href.startsWith("http") || href.startsWith("#") || href.startsWith("/admin")) return href;
+    if (href === "/") return `/${locale}`;
+    if (href.startsWith("/en") || href.startsWith("/ar")) return href;
+    return `/${locale}${href}`;
+  }
+
+  function labelFor(item: MenuItem) {
+    const key = item.menu_key as keyof typeof t;
+    return t[key] || item.label;
+  }
+
   const [menuOpen, setMenuOpen] = useState(false);
   const [registerOpen, setRegisterOpen] = useState(false);
   const [headerSettings, setHeaderSettings] = useState<HeaderSettings>(fallbackHeader);
@@ -151,14 +202,14 @@ export default function SiteHeader() {
 
   async function handleLogout() {
     await supabase.auth.signOut();
-    window.location.href = "/";
+    window.location.href = `/${locale}`;
   }
 
   return (
     <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 backdrop-blur">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex min-h-[76px] items-center justify-between gap-4">
-          <a href="/" className="flex min-w-0 flex-1 items-center gap-3">
+          <a href={`/${locale}`} className="flex min-w-0 flex-1 items-center gap-3">
             {logoUrl ? (
               <img
                 src={logoUrl}
@@ -188,7 +239,7 @@ export default function SiteHeader() {
             {publicNavItems.map((item) => (
               <a
                 key={item.menu_key || item.href}
-                href={item.href}
+                href={hrefFor(item.href)}
                 className={
                   item.is_button
                     ? "whitespace-nowrap rounded-xl bg-slate-900 px-4 py-2 font-semibold text-white transition hover:bg-slate-800"
@@ -196,7 +247,7 @@ export default function SiteHeader() {
                 }
                 style={{ fontSize: `${menuFontSize}px` }}
               >
-                {item.label}
+                {labelFor(item)}
               </a>
             ))}
 
@@ -209,33 +260,33 @@ export default function SiteHeader() {
                       onClick={() => setRegisterOpen((prev) => !prev)}
                       className="inline-flex items-center gap-2 whitespace-nowrap rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
                     >
-                      Register
+                      {t.register}
                       <span className="text-xs">{registerOpen ? "▲" : "▼"}</span>
                     </button>
 
                     {registerOpen ? (
                       <div className="absolute right-0 top-full mt-2 w-48 rounded-2xl border border-slate-200 bg-white p-2 shadow-lg">
-                        <a href="/register/team" className="block rounded-xl px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-emerald-700">
-                          Register Team
+                        <a href={hrefFor("/register/team")} className="block rounded-xl px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-emerald-700">
+                          {t.registerTeam}
                         </a>
-                        <a href="/register/player" className="block rounded-xl px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-emerald-700">
-                          Register Player
+                        <a href={hrefFor("/register/player")} className="block rounded-xl px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-emerald-700">
+                          {t.registerPlayer}
                         </a>
                       </div>
                     ) : null}
                   </div>
 
-                  <a href="/dashboard" className="whitespace-nowrap rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800">
-                    My Dashboard
+                  <a href={hrefFor("/dashboard")} className="whitespace-nowrap rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800">
+                    {t.dashboard}
                   </a>
 
                   <button type="button" onClick={handleLogout} className="whitespace-nowrap rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
-                    Logout
+                    {t.logout}
                   </button>
                 </>
               ) : (
-                <a href="/login?next=/dashboard" className="whitespace-nowrap rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800">
-                  Login / Join
+                <a href={hrefFor("/login?next=/dashboard")} className="whitespace-nowrap rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800">
+                  {t.loginJoin}
                 </a>
               ))}
           </nav>
@@ -245,7 +296,7 @@ export default function SiteHeader() {
             onClick={() => setMenuOpen((prev) => !prev)}
             className="inline-flex items-center justify-center rounded-2xl border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 xl:hidden"
           >
-            Menu
+            {t.menu}
           </button>
         </div>
 
@@ -255,14 +306,14 @@ export default function SiteHeader() {
               {publicNavItems.map((item) => (
                 <a
                   key={item.menu_key || item.href}
-                  href={item.href}
+                  href={hrefFor(item.href)}
                   className={
                     item.is_button
                       ? "rounded-xl bg-slate-900 px-3 py-2 text-sm font-semibold text-white"
                       : "rounded-xl px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-emerald-700"
                   }
                 >
-                  {item.label}
+                  {labelFor(item)}
                 </a>
               ))}
 
@@ -270,26 +321,26 @@ export default function SiteHeader() {
                 (isLoggedIn ? (
                   <>
                     <div className="mt-2 rounded-2xl border border-slate-200 p-2">
-                      <p className="px-2 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Register</p>
-                      <a href="/register/team" className="block rounded-xl px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-emerald-700">
+                      <p className="px-2 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">{t.register}</p>
+                      <a href={hrefFor("/register/team")} className="block rounded-xl px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-emerald-700">
                         Register Team
                       </a>
-                      <a href="/register/player" className="block rounded-xl px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-emerald-700">
+                      <a href={hrefFor("/register/player")} className="block rounded-xl px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-emerald-700">
                         Register Player
                       </a>
                     </div>
 
-                    <a href="/dashboard" className="rounded-xl px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-emerald-700">
-                      My Dashboard
+                    <a href={hrefFor("/dashboard")} className="rounded-xl px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-emerald-700">
+                      {t.dashboard}
                     </a>
 
                     <button type="button" onClick={handleLogout} className="rounded-xl px-3 py-2 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-emerald-700">
-                      Logout
+                      {t.logout}
                     </button>
                   </>
                 ) : (
-                  <a href="/login?next=/dashboard" className="rounded-xl px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-emerald-700">
-                    Login / Join
+                  <a href={hrefFor("/login?next=/dashboard")} className="rounded-xl px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:text-emerald-700">
+                    {t.loginJoin}
                   </a>
                 ))}
             </div>

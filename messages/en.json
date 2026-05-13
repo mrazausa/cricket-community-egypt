@@ -1,7 +1,29 @@
 {
-  "home": {
-    "title": "Cricket Community Egypt",
-    "tagline": "Uniting Cricket Enthusiasts",
-    "viewScorecard": "View Scorecard"
+  "nav": {
+    "home": "Home",
+    "tournaments": "Tournaments",
+    "rankings": "Rankings",
+    "teams": "Teams",
+    "players": "Players",
+    "register": "Register",
+    "dashboard": "My Dashboard",
+    "logout": "Logout"
+  },
+  "homePage": {
+    "live": "Live",
+    "nextMatch": "Next Match",
+    "matchCenter": "Match Center",
+    "tournamentSnapshot": "Tournament Snapshot",
+    "featuredTournament": "Featured Tournament",
+    "tournamentWindow": "Tournament Window",
+    "venue": "Venue",
+    "format": "Format",
+    "timeline": "Timeline",
+    "mainHighlight": "Main Highlight",
+    "upcomingMatches": "Upcoming Matches",
+    "completedResults": "Completed Results",
+    "details": "Details",
+    "scorecard": "Scorecard",
+    "viewFullMatchCenter": "View Full Match Center"
   }
 }

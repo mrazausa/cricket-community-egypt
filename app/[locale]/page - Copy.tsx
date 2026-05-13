@@ -1,9 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useParams } from "next/navigation";
 import SiteFooter from "@/components/layout/site-footer";
 import SiteHeader from "@/components/layout/site-header";
+import HeroLiveScorePanel from "@/components/home/HeroLiveScorePanel";
 import { supabase } from "@/utils/supabase/client";
+import LiveTournamentBlocks from "@/components/home/LiveTournamentBlocks";
 
 type TournamentRow = {
   id: string;
@@ -557,10 +560,27 @@ function getCommunityFallbackLabel(sectionType: string) {
 }
 
 export default function HomePage() {
+  const params = useParams();
+  const locale = String(params?.locale || "en");
+  const [heroLiveActive, setHeroLiveActive] = useState(false);
+
   const [tournaments, setTournaments] = useState<TournamentRow[]>([]);
   const [homepageSettings, setHomepageSettings] =
     useState<HomepageSettingsRow>(fallbackHomepageSettings);
   const [playersWatch, setPlayersWatch] = useState<HomepagePlayerWatch[]>([]);
+  useEffect(() => {
+    const handleHeroLiveStatus = (event: Event) => {
+      const detail = (event as CustomEvent<{ active?: boolean }>).detail;
+      setHeroLiveActive(Boolean(detail?.active));
+    };
+
+    window.addEventListener("cce-hero-live-status", handleHeroLiveStatus);
+
+    return () => {
+      window.removeEventListener("cce-hero-live-status", handleHeroLiveStatus);
+    };
+  }, []);
+
   const [quickLinks, setQuickLinks] = useState<HomepageQuickLink[]>([]);
   const [communityCards, setCommunityCards] = useState<HomepageCommunityCard[]>([]);
   const [homeBlocks, setHomeBlocks] = useState<Record<string, SitePageBlock>>({});
@@ -1145,10 +1165,12 @@ try {
     <main className="min-h-screen bg-[#f4f7fb] text-slate-900">
       <SiteHeader />
 
-      <HomepageHeroTicker
-        snapshot={stumpsLiveSnapshot}
-        loading={loadingStumpsLive}
-      />
+      {!heroLiveActive && (
+        <HomepageHeroTicker
+          snapshot={stumpsLiveSnapshot}
+          loading={loadingStumpsLive}
+        />
+      )}
 
 
       <div className="flex flex-col">
@@ -1157,7 +1179,7 @@ try {
             className="mx-auto w-full max-w-7xl px-4 py-5 sm:px-6 lg:px-8 lg:py-8"
             style={{ order: blockOrder("hero", homepageSettings.hero_order ?? 1) }}
           >
-            <div className="grid gap-5 lg:grid-cols-[1.65fr_0.85fr] lg:items-stretch">
+            <div className={`grid gap-5 lg:items-stretch ${heroLiveActive ? "lg:grid-cols-1" : "lg:grid-cols-[1.65fr_0.85fr]"}`}>
               <div className="flex min-h-[560px] flex-col overflow-hidden rounded-[30px] bg-gradient-to-br from-slate-950 via-[#02103a] to-emerald-900 p-6 text-white shadow-2xl sm:p-8 lg:h-[640px] lg:p-7">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="rounded-full bg-emerald-400/15 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-emerald-200">
@@ -1174,10 +1196,9 @@ try {
                   </span>
                 </div>
 
-                <HeroMediaBlock
-                  youtubeUrl={homepageSettings.hero_youtube_url || ""}
-                  autoplay={homepageSettings.hero_youtube_autoplay === true}
-                  imageUrl={heroPrimaryImage}
+                <HeroLiveScorePanel
+                  locale={locale}
+                  fallbackImageUrl={heroPrimaryImage}
                   title={heroTitle}
                 />
 
@@ -1278,17 +1299,19 @@ try {
                 </div>
               </div>
 
-              <HomepageLiveUpdatePanel
-                activeLiveUpdate={activeLiveUpdate}
-                liveUpdates={liveUpdates}
-                currentIndex={currentIndex}
-                setCurrentIndex={setCurrentIndex}
-                featuredVisual={homepageFeaturedVisual}
-                featuredTournament={featuredTournament}
-                homepageSettings={homepageSettings}
-                stumpsLiveSnapshot={stumpsLiveSnapshot}
-                loadingStumpsLive={loadingStumpsLive}
-              />
+              {!heroLiveActive && (
+                <HomepageLiveUpdatePanel
+                  activeLiveUpdate={activeLiveUpdate}
+                  liveUpdates={liveUpdates}
+                  currentIndex={currentIndex}
+                  setCurrentIndex={setCurrentIndex}
+                  featuredVisual={homepageFeaturedVisual}
+                  featuredTournament={featuredTournament}
+                  homepageSettings={homepageSettings}
+                  stumpsLiveSnapshot={stumpsLiveSnapshot}
+                  loadingStumpsLive={loadingStumpsLive}
+                />
+              )}
             </div>
           </section>
         )}
@@ -1418,72 +1441,8 @@ try {
                   </div>
                 </div>
                 )}
-
                 {showMatchCenterBlock && (
-                <div>
-                  <div className="mb-4 flex items-end justify-between gap-4">
-                    <div>
-                      <p className="text-xs font-bold uppercase tracking-[0.24em] text-emerald-700">
-                        Live Tournament Blocks
-                      </p>
-                      <h3 className="mt-1 text-2xl font-black tracking-tight text-slate-950">
-                        Match Center
-                      </h3>
-                    </div>
-                  </div>
-
-                  <div className="rounded-[2rem] border border-slate-200 bg-white p-4 shadow-sm sm:p-5 lg:p-6">
-                    <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-                      <div>
-                        <p className="text-xs font-bold uppercase tracking-[0.22em] text-emerald-700">
-                          Quick Match View
-                        </p>
-                        <p className="mt-1 text-sm font-semibold text-slate-500">
-                          Showing latest 2 upcoming and latest 2 completed matches.
-                        </p>
-                      </div>
-                      <a
-                        href={featuredTournament?.slug ? `/tournaments/${featuredTournament.slug}#schedule` : "/tournaments"}
-                        className="inline-flex h-10 items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 text-sm font-black text-slate-900 transition hover:border-emerald-300 hover:text-emerald-700"
-                      >
-                        View Full Match Center →
-                      </a>
-                    </div>
-
-                    <StumpsHomepageLiveCard
-                      snapshot={stumpsLiveSnapshot}
-                      loading={loadingStumpsLive}
-                    />
-
-                    {loadingLiveBlocks ? (
-                      <EmptyCard text="Loading live tournament updates..." />
-                    ) : (
-                      <div className="grid gap-5 lg:grid-cols-2">
-                        <MatchCarousel
-                          title="Upcoming Matches"
-                          badge="Next 2"
-                          badgeClass="bg-emerald-100 text-emerald-700"
-                          emptyText="No upcoming match added yet."
-                          matches={upcomingMatches.slice(0, 2)}
-                          teams={tournamentTeams}
-                          type="upcoming"
-                          tournamentSlug={featuredTournament?.slug || ""}
-                        />
-
-                        <MatchCarousel
-                          title="Completed Results"
-                          badge="Latest 2"
-                          badgeClass="bg-slate-100 text-slate-700"
-                          emptyText="No completed match result yet."
-                          matches={completedMatches.slice(0, 2)}
-                          teams={tournamentTeams}
-                          type="completed"
-                          tournamentSlug={featuredTournament?.slug || ""}
-                        />
-                      </div>
-                    )}
-                  </div>
-                </div>
+                  <LiveTournamentBlocks locale={locale} />
                 )}
               </div>
             </div>

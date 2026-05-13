@@ -1,7 +1,29 @@
 {
-  "home": {
-    "title": "مجتمع الكريكيت في مصر",
-    "tagline": "نجمع عشاق الكريكيت",
-    "viewScorecard": "عرض بطاقة المباراة"
+  "nav": {
+    "home": "الرئيسية",
+    "tournaments": "البطولات",
+    "rankings": "التصنيفات",
+    "teams": "الفرق",
+    "players": "اللاعبون",
+    "register": "التسجيل",
+    "dashboard": "لوحة التحكم",
+    "logout": "تسجيل الخروج"
+  },
+  "homePage": {
+    "live": "مباشر",
+    "nextMatch": "المباراة القادمة",
+    "matchCenter": "مركز المباريات",
+    "tournamentSnapshot": "نظرة على البطولة",
+    "featuredTournament": "البطولة المميزة",
+    "tournamentWindow": "فترة البطولة",
+    "venue": "الملعب",
+    "format": "النظام",
+    "timeline": "الجدول الزمني",
+    "mainHighlight": "الحدث الرئيسي",
+    "upcomingMatches": "المباريات القادمة",
+    "completedResults": "النتائج المكتملة",
+    "details": "التفاصيل",
+    "scorecard": "بطاقة النتيجة",
+    "viewFullMatchCenter": "عرض مركز المباريات الكامل"
   }
 }
