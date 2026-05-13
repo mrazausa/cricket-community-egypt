@@ -52,49 +52,6 @@ function matchTimeLabel(match: LiveSummaryMatch) {
   return date || time || "Time update soon";
 }
 
-function ordinal(value: number) {
-  const suffix =
-    value % 10 === 1 && value % 100 !== 11
-      ? "st"
-      : value % 10 === 2 && value % 100 !== 12
-        ? "nd"
-        : value % 10 === 3 && value % 100 !== 13
-          ? "rd"
-          : "th";
-
-  return `${value}${suffix}`;
-}
-
-function stageLabel(match: LiveSummaryMatch, index: number, completed: boolean) {
-  const title = String(match.matchTitle || "").trim();
-  const normalized = title.toLowerCase();
-
-  if (normalized.includes("semi")) {
-    return `${ordinal(index + 1)} Semi Final`;
-  }
-
-  if (normalized.includes("final")) {
-    return "Final";
-  }
-
-  if (title && title.toLowerCase() !== "match") {
-    return title;
-  }
-
-  return completed ? "Completed Result" : "Upcoming Match";
-}
-
-function badgeLabel(match: LiveSummaryMatch, index: number) {
-  const title = String(match.matchTitle || "").trim().toLowerCase();
-  const matchNo = match.matchTitle?.match(/#?\d+/)?.[0]?.replace("#", "") || "";
-
-  if (matchNo) return `#${matchNo}`;
-  if (title.includes("semi")) return `SF${index + 1}`;
-  if (title.includes("final")) return "Final";
-
-  return "—";
-}
-
 function MatchBadge({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-14 w-20 shrink-0 flex-col items-center justify-center rounded-2xl bg-slate-950 text-white shadow-lg">
@@ -177,26 +134,23 @@ function FixtureCard({
   match,
   locale,
   completed = false,
-  fixtureIndex = 0,
 }: {
   match: LiveSummaryMatch;
   locale: string;
   completed?: boolean;
-  fixtureIndex?: number;
 }) {
   const teamA = match.teams?.[0];
   const teamB = match.teams?.[1];
-  const cardStageLabel = stageLabel(match, fixtureIndex, completed);
-  const cardBadgeLabel = badgeLabel(match, fixtureIndex);
+  const matchNo = match.matchTitle?.match(/#?\d+/)?.[0]?.replace("#", "") || "";
 
   return (
     <div className="rounded-[1.6rem] border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex gap-4">
-        <MatchBadge>{cardBadgeLabel}</MatchBadge>
+        <MatchBadge>{matchNo ? `#${matchNo}` : "—"}</MatchBadge>
 
         <div className="min-w-0 flex-1">
           <div className="mb-3 text-[11px] font-black uppercase tracking-[0.28em] text-emerald-700">
-            {cardStageLabel}
+            {completed ? "Completed Result" : "Upcoming Match"}
           </div>
 
           <div className="flex flex-wrap items-center gap-2 text-xl font-black text-slate-950">
@@ -374,12 +328,11 @@ export default function LiveTournamentBlocks({ locale }: { locale: string }) {
               {upcomingMatches.slice(0, 2).length > 0 ? (
                 upcomingMatches
                   .slice(0, 2)
-                  .map((match, index) => (
+                  .map((match) => (
                     <FixtureCard
                       key={match.matchId}
                       match={match}
                       locale={locale}
-                      fixtureIndex={index}
                     />
                   ))
               ) : (
@@ -407,13 +360,12 @@ export default function LiveTournamentBlocks({ locale }: { locale: string }) {
               {completedMatches.slice(0, 2).length > 0 ? (
                 completedMatches
                   .slice(0, 2)
-                  .map((match, index) => (
+                  .map((match) => (
                     <FixtureCard
                       key={match.matchId}
                       match={match}
                       locale={locale}
                       completed
-                      fixtureIndex={index}
                     />
                   ))
               ) : (

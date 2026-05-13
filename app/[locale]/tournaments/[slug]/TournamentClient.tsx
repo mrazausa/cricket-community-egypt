@@ -33,6 +33,7 @@ type TournamentRow = {
   hero_youtube_autoplay?: boolean | null;
   hero_banner_url?: string | null;
   hero_media_mode?: string | null;
+  stumps_tournament_id?: string | null;
 };
 
 type TeamInfo = {
@@ -146,6 +147,133 @@ type TournamentPointsRow = {
 };
 
 type MatchFilter = "all" | "upcoming" | "completed";
+
+type StumpsSummaryTeam = {
+  teamId?: string;
+  teamName?: string;
+  teamScore?: string | null;
+  teamLogo?: string | null;
+};
+
+type StumpsSummaryMatch = {
+  matchId: string;
+  tournamentName?: string;
+  tournamentId?: string;
+  matchTitle?: string;
+  matchFormat?: string;
+  matchDate?: string;
+  matchTime?: string;
+  matchStatus?: string;
+  matchResult?: string;
+  venue?: string;
+  teams?: StumpsSummaryTeam[];
+};
+
+type StumpsSummaryResponse = {
+  success?: boolean;
+  liveMatches?: StumpsSummaryMatch[];
+  upcomingMatches?: StumpsSummaryMatch[];
+  completedMatches?: StumpsSummaryMatch[];
+};
+
+function normalizeLookup(value: unknown) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/[^a-z0-9]/g, "");
+}
+
+function toStumpsMatchDateTime(match: StumpsSummaryMatch) {
+  const date = String(match.matchDate || "").trim();
+  const time = String(match.matchTime || "").trim();
+
+  if (!date && !time) return null;
+  if (date && time) return `${date}T${time.length === 5 ? `${time}:00` : time}`;
+  return date || null;
+}
+
+function ordinalLabel(value: number) {
+  const suffix =
+    value % 10 === 1 && value % 100 !== 11
+      ? "st"
+      : value % 10 === 2 && value % 100 !== 12
+        ? "nd"
+        : value % 10 === 3 && value % 100 !== 13
+          ? "rd"
+          : "th";
+
+  return `${value}${suffix}`;
+}
+
+function buildStageLabel(match: StumpsSummaryMatch, semiIndex: number) {
+  const title = String(match.matchTitle || "").trim();
+  const normalized = title.toLowerCase();
+
+  if (normalized.includes("semi")) return `${ordinalLabel(semiIndex)} Semi Final`;
+  if (normalized.includes("final")) return "Final";
+
+  return title && normalized !== "match" ? title : "";
+}
+
+function buildStumpsTitle(match: StumpsSummaryMatch) {
+  const teamA = match.teams?.[0]?.teamName || "Team A";
+  const teamB = match.teams?.[1]?.teamName || "Team B";
+  return `${teamA} vs ${teamB}`;
+}
+
+function buildStumpsScheduleRows(matches: StumpsSummaryMatch[], locale: string): MatchRow[] {
+  const sorted = [...matches].sort((a, b) => {
+    const ad = toStumpsMatchDateTime(a);
+    const bd = toStumpsMatchDateTime(b);
+    const at = ad ? new Date(ad).getTime() : 0;
+    const bt = bd ? new Date(bd).getTime() : 0;
+    return at - bt;
+  });
+
+  let semiCounter = 0;
+
+  return sorted.map((match, index) => {
+    const title = String(match.matchTitle || "").toLowerCase();
+    let stageLabel = "";
+
+    if (title.includes("semi")) {
+      semiCounter += 1;
+      stageLabel = buildStageLabel(match, semiCounter);
+    } else {
+      stageLabel = buildStageLabel(match, index + 1);
+    }
+
+    const status = normalizeMatchStatus(match.matchStatus || "");
+    const mappedStatus =
+      status.includes("progress") || status.includes("live")
+        ? "live"
+        : status.includes("completed") || status.includes("complete")
+          ? "completed"
+          : "upcoming";
+
+    const dateTime = toStumpsMatchDateTime(match);
+
+    return {
+      id: `stumps-${match.matchId}`,
+      tournament_id: null,
+      team_a_id: null,
+      team_b_id: null,
+      title: buildStumpsTitle(match),
+      match_datetime: dateTime,
+      venue: [match.venue, stageLabel].filter(Boolean).join(" - ") || match.venue || stageLabel || null,
+      status: mappedStatus,
+      result_summary: match.matchResult || null,
+      player_of_match: null,
+      key_players: stageLabel || null,
+      scorecard_pdf_url: null,
+      external_score_url: match.matchId ? `/${locale}/live/${match.matchId}` : null,
+      is_featured_home: false,
+      match_number: null,
+      sort_order: index + 1,
+    };
+  });
+}
+
 type PerformerCategoryKey = "mvp" | "batsman" | "bowler" | "allrounder" | "keeper" | "fielder" | "pom" | "other";
 
 function normalizeMatchStatus(value: string | null | undefined) {
@@ -609,7 +737,8 @@ function PerformerRaceCard({
 
 export default function PublicTournamentPage() {
   const searchParams = useSearchParams();
-  const params = useParams<{ slug: string }>();
+  const params = useParams<{ locale?: string; slug: string }>();
+  const locale = typeof params?.locale === "string" ? params.locale : "en";
   const slug = typeof params?.slug === "string" ? params.slug : "";
 
   const [tournament, setTournament] = useState<TournamentRow | null>(null);
@@ -641,7 +770,7 @@ export default function PublicTournamentPage() {
   useEffect(() => {
     if (!tournament?.id) return;
     loadTournamentTeams(tournament.id);
-    loadLiveBlocks(tournament.id);
+    loadLiveBlocks(tournament);
     loadRankings(tournament.id);
     loadTournamentPointsTable(tournament.id);
   }, [tournament?.id]);
@@ -731,53 +860,73 @@ export default function PublicTournamentPage() {
     setLoadingTournamentTeams(false);
   }
 
-  async function loadLiveBlocks(tournamentId: string) {
+  async function loadLiveBlocks(activeTournament: TournamentRow) {
     setLoadingLiveBlocks(true);
 
-    const [nextMatchRes, latestResultRes, recentMatchesRes, latestNewsRes] =
-      await Promise.all([
-        supabase
-          .from("matches")
-          .select("*")
-          .eq("tournament_id", tournamentId)
-          .eq("status", "upcoming")
-          .order("match_number", { ascending: true, nullsFirst: false })
-          .order("match_datetime", { ascending: true })
-          .limit(1)
-          .maybeSingle(),
+    const tournamentId = activeTournament.id;
+    const stumpsTournamentId = activeTournament.stumps_tournament_id?.trim();
 
-        supabase
-          .from("matches")
-          .select("*")
-          .eq("tournament_id", tournamentId)
-          .eq("status", "completed")
-          .order("match_number", { ascending: false, nullsFirst: false })
-          .order("match_datetime", { ascending: false })
-          .limit(1)
-          .maybeSingle(),
+    const [latestNewsRes, fallbackMatchesRes] = await Promise.all([
+      supabase
+        .from("news")
+        .select("*")
+        .eq("tournament_id", tournamentId)
+        .eq("is_published", true)
+        .order("sort_order", { ascending: true })
+        .order("created_at", { ascending: false })
+        .limit(4),
 
-        supabase
-          .from("matches")
-          .select("*")
-          .eq("tournament_id", tournamentId)
-          .order("match_number", { ascending: true, nullsFirst: false })
-          .order("match_datetime", { ascending: true })
-          .limit(20),
+      supabase
+        .from("matches")
+        .select("*")
+        .eq("tournament_id", tournamentId)
+        .order("match_number", { ascending: true, nullsFirst: false })
+        .order("match_datetime", { ascending: true })
+        .limit(20),
+    ]);
 
-        supabase
-          .from("news")
-          .select("*")
-          .eq("tournament_id", tournamentId)
-          .eq("is_published", true)
-          .order("sort_order", { ascending: true })
-          .order("created_at", { ascending: false })
-          .limit(4),
-      ]);
-
-    setNextMatch((nextMatchRes.data as MatchRow | null) || null);
-    setLatestResult((latestResultRes.data as MatchRow | null) || null);
-    setRecentMatches((recentMatchesRes.data || []) as MatchRow[]);
     setLatestNews((latestNewsRes.data || []) as NewsRow[]);
+
+    try {
+      const query = stumpsTournamentId
+        ? `?tournamentId=${encodeURIComponent(stumpsTournamentId)}`
+        : `?tournamentName=${encodeURIComponent(activeTournament.title || "")}`;
+
+      const res = await fetch(`/api/stumps/live-summary${query}`, {
+        cache: "no-store",
+      });
+
+      const stumpsData = (await res.json()) as StumpsSummaryResponse;
+
+      const stumpsMatches = [
+        ...(stumpsData.liveMatches || []),
+        ...(stumpsData.upcomingMatches || []),
+        ...(stumpsData.completedMatches || []),
+      ];
+
+      if (stumpsMatches.length > 0) {
+        const mappedMatches = buildStumpsScheduleRows(stumpsMatches, locale);
+
+        setRecentMatches(mappedMatches);
+        setNextMatch(mappedMatches.find(isUpcomingMatch) || null);
+
+        const completed = mappedMatches.filter(isCompletedMatch);
+        setLatestResult(completed[completed.length - 1] || null);
+
+        setLoadingLiveBlocks(false);
+        return;
+      }
+    } catch (error) {
+      console.error("STUMPS tournament schedule sync failed:", error);
+    }
+
+    const fallbackMatches = (fallbackMatchesRes.data || []) as MatchRow[];
+    setRecentMatches(fallbackMatches);
+    setNextMatch(fallbackMatches.find(isUpcomingMatch) || null);
+
+    const completedFallback = fallbackMatches.filter(isCompletedMatch);
+    setLatestResult(completedFallback[completedFallback.length - 1] || null);
+
     setLoadingLiveBlocks(false);
   }
 
@@ -1326,7 +1475,16 @@ function TournamentHeroMedia({ tournament }: { tournament: TournamentRow }) {
   return null;
 }
 function getMatchDisplayNumber(match: MatchRow) {
-  return match.match_number && match.match_number > 0 ? `Match ${match.match_number}` : "Match";
+  if (match.match_number && match.match_number > 0) return `Match ${match.match_number}`;
+
+  const stage = String(match.key_players || match.venue || match.title || "").toLowerCase();
+
+  if (stage.includes("1st semi")) return "SF1";
+  if (stage.includes("2nd semi")) return "SF2";
+  if (stage.includes("semi")) return "SF";
+  if (stage.includes("final")) return "Final";
+
+  return "Match";
 }
 
 function ScheduleMatchCard({ match, teams }: { match: MatchRow; teams: TeamInfo[] }) {

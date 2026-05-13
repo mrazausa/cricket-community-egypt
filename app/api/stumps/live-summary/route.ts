@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 type AnyMatch = Record<string, any>;
 
@@ -297,8 +297,11 @@ function isUpcoming(match: AnyMatch) {
   );
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const tournamentId = request.nextUrl.searchParams.get("tournamentId");
+    const tournamentName = request.nextUrl.searchParams.get("tournamentName");
+
     const clubId = process.env.STUMPS_CLUB_ID;
     const apiKey = process.env.STUMPS_API_KEY;
     const token = process.env.STUMPS_TOKEN;
@@ -336,9 +339,21 @@ export async function GET() {
       payload = rawText;
     }
 
-    const allMatches = asArray(payload)
+    let allMatches = asArray(payload)
       .map((match) => simplifyMatch(match, logoInfo.logoMap))
       .filter((m) => m.matchId);
+
+    if (tournamentId) {
+      const targetId = tournamentId.trim().toLowerCase();
+      allMatches = allMatches.filter(
+        (m) => String(m.tournamentId || "").trim().toLowerCase() === targetId
+      );
+    } else if (tournamentName) {
+      const targetName = tournamentName.trim().toLowerCase();
+      allMatches = allMatches.filter((m) =>
+        String(m.tournamentName || "").trim().toLowerCase().includes(targetName)
+      );
+    }
 
     const liveMatches = allMatches.filter(isLive);
 
@@ -362,6 +377,10 @@ export async function GET() {
       success: stumpsRes.ok,
       status: stumpsRes.status,
       updatedAt: new Date().toISOString(),
+      filter: {
+        tournamentId: tournamentId || null,
+        tournamentName: tournamentName || null,
+      },
       logoSource: logoInfo.source,
       logoDebug: {
         rows: logoInfo.rows,
