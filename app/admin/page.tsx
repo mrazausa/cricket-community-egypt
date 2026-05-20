@@ -87,6 +87,14 @@ const adminModules: AdminModule[] = [
     tag: "Matches",
     group: "Match & Ranking",
   },
+
+  {
+    title: "STUMPS Overlay Control",
+    description: "Live broadcast control panel for OBS overlays, scorebugs and event animations using STUMPS live data.",
+    href: "/admin/overlay-control",
+    tag: "Broadcast",
+    group: "Match & Ranking",
+  },
   {
     title: "Team Rankings",
     description: "Manage team rankings, table positions and ranking display data.",
