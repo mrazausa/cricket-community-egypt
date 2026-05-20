@@ -767,8 +767,8 @@ function SummaryOverlay({
   if (scene === "scorebug") {
     return (
       <div
-        className={`fixed ${posClass(position, scene)} w-[420px] rounded-[1.4rem] bg-slate-950/84 p-4 text-white shadow-2xl ring-1 ring-emerald-300/30 backdrop-blur-xl`}
-        style={{ transform: transformFor(position, scale) }}
+        className={`fixed left-1/2 top-6 w-[460px] -translate-x-1/2 rounded-[1.4rem] bg-slate-950/84 p-4 text-white shadow-2xl ring-1 ring-emerald-300/30 backdrop-blur-xl`}
+        style={{ transform: `translateX(-50%) scale(${scale})`, transformOrigin: "bottom center" }}
       >
         <div className="mb-2 flex items-center justify-between">
           <span className="rounded-full bg-red-600 px-3 py-1 text-xs font-black uppercase tracking-[0.2em]">
@@ -792,7 +792,7 @@ function SummaryOverlay({
 
   return (
     <div
-      className={`fixed ${posClass(position, scene)} h-[96px] w-[min(1540px,calc(100vw-110px))] overflow-hidden rounded-[1.5rem] border border-white/10 bg-slate-950/72 text-white shadow-2xl backdrop-blur-xl`}
+      className={`fixed left-1/2 bottom-5 h-[96px] w-[min(1720px,96vw)] -translate-x-1/2 overflow-hidden rounded-[1.5rem] border border-white/10 bg-slate-950/72 text-white shadow-2xl backdrop-blur-xl`}
       style={{ transform: transformFor(position, scale) }}
     >
       <div className="flex h-full items-center">
