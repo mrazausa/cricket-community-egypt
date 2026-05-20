@@ -127,10 +127,39 @@ export default function HeroLiveScorePanel({
         ? data.liveMatches
         : [];
 
-      if (freshLiveMatches.length > 0) {
+      // Fetch latest live scorecard for each live match
+      const enrichedMatches = await Promise.all(
+        freshLiveMatches.map(async (match: Match) => {
+          try {
+            const scoreRes = await fetch(
+              `/api/stumps/scorecard/${match.matchId}`,
+              { cache: "no-store" }
+            );
+
+            const scoreData = await scoreRes.json();
+
+            return {
+              ...match,
+              teams:
+                scoreData?.teams && Array.isArray(scoreData.teams)
+                  ? scoreData.teams
+                  : match.teams,
+              matchStatus:
+                scoreData?.matchStatus || match.matchStatus,
+              matchResult:
+                scoreData?.matchResult || match.matchResult,
+            };
+          } catch (err) {
+            console.error("Scorecard sync failed", err);
+            return match;
+          }
+        })
+      );
+
+      if (enrichedMatches.length > 0) {
         lastLiveAtRef.current = Date.now();
-        lastStableMatchesRef.current = freshLiveMatches;
-        setLiveMatches(freshLiveMatches);
+        lastStableMatchesRef.current = enrichedMatches;
+        setLiveMatches(enrichedMatches);
         return;
       }
 
