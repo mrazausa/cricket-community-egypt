@@ -334,7 +334,7 @@ function TeamLogo({
   size?: "sm" | "md" | "lg";
 }) {
   const cls =
-    size === "lg" ? "h-24 w-24" : size === "md" ? "h-14 w-14" : "h-8 w-8";
+    size === "lg" ? "h-24 w-24" : size === "md" ? "h-10 w-10" : "h-8 w-8";
 
   if (!logo) {
     return (
@@ -696,7 +696,7 @@ function OverPopup({
 
   return (
     <div
-      className="pointer-events-none fixed left-1/2 top-[12%] z-40 w-[min(1120px,calc(100vw-80px))] rounded-[1.9rem] border border-emerald-300/20 bg-slate-950/38 px-8 py-6 text-white shadow-2xl backdrop-blur-sm"
+      className="pointer-events-none fixed left-1/2 top-[12%] z-40 w-[min(1120px,calc(100vw-80px))] rounded-[1.9rem] border border-emerald-300/20 bg-slate-950/38 px-8 py-6 text-white shadow-2xl backdrop-blur-[1px]"
       style={{ transform: `translateX(-50%) scale(${scale})`, transformOrigin: "top center" }}
     >
       <div className="grid grid-cols-[1fr_430px] items-center gap-8">
@@ -707,7 +707,7 @@ function OverPopup({
           <h2 className="mt-2 text-5xl font-black leading-none">
             {teamName} {scoreText}
           </h2>
-          <p className="mt-2 text-base font-bold text-white/85">
+          <p className="mt-2 text-base font-bold text-white/70">
             {overNo}.0 overs completed
           </p>
         </div>
@@ -720,7 +720,7 @@ function OverPopup({
             <p className="mt-1 text-xl font-black">
               {bats?.[0]?.playerName || "Batter"} {bats?.[0] ? `${bats[0].runs ?? "-"}(${bats[0].balls ?? "-"})` : ""}
             </p>
-            <p className="text-base font-bold text-white/80">
+            <p className="text-base font-bold text-white/65">
               {bats?.[1]?.playerName || "Batter"} {bats?.[1] ? `${bats[1].runs ?? "-"}(${bats[1].balls ?? "-"})` : ""}
             </p>
           </div>
@@ -731,7 +731,7 @@ function OverPopup({
             </p>
             <p className="mt-1 text-xl font-black">
               {lead?.playerName || "Bowler"}
-              <span className="ml-2 text-base text-white/80">
+              <span className="ml-2 text-base text-white/65">
                 {lead ? `${lead.overs || "0"} ov • ${lead.runsConceded ?? 0}/${lead.wickets ?? 0}` : ""}
               </span>
             </p>
@@ -741,11 +741,11 @@ function OverPopup({
 
       <div className="mt-4 grid grid-cols-2 gap-3">
         <div className="rounded-2xl bg-white/6 px-5 py-3 text-center">
-          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-white/65">This Over</p>
+          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-white/45">This Over</p>
           <p className="mt-1 text-3xl font-black text-emerald-300">{data?.runs ?? "-"}</p>
         </div>
         <div className="rounded-2xl bg-white/6 px-5 py-3 text-center">
-          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-white/65">Wickets</p>
+          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-white/45">Wickets</p>
           <p className="mt-1 text-3xl font-black text-red-300">{current?.wickets ?? data?.score?.split("/")?.[1] ?? 0}</p>
         </div>
       </div>
@@ -760,7 +760,7 @@ function IntroScene({ match, scale }: { match: SummaryMatch | null; scale: numbe
   return (
     <div className="fixed inset-0 flex items-center justify-center bg-transparent">
       <div
-        className="relative w-[min(1180px,calc(100vw-100px))] overflow-hidden rounded-[2rem] border border-white/10 shadow-[0_10px_40px_rgba(0,0,0,0.45)] border border-white/35 bg-cyan-950/45 px-10 py-10 text-center text-white shadow-2xl backdrop-blur-sm"
+        className="relative w-[min(1180px,calc(100vw-100px))] overflow-hidden rounded-[2rem] border border-white/35 bg-cyan-950/45 px-10 py-10 text-center text-white shadow-2xl backdrop-blur-sm"
         style={{ transform: `scale(${scale})` }}
       >
         <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-white/90 text-2xl font-black text-cyan-900 shadow-xl">
@@ -814,7 +814,7 @@ function SummaryOverlay({
   if (scene === "scorebug") {
     return (
       <div
-        className={`fixed left-1/2 top-6 w-[460px] -translate-x-1/2 rounded-[1.4rem] bg-slate-950/84 p-4 text-white shadow-2xl ring-1 ring-emerald-300/30 backdrop-blur-sm`}
+        className={`fixed left-1/2 top-6 w-[460px] -translate-x-1/2 rounded-[1.4rem] bg-slate-950/84 p-4 text-white shadow-2xl ring-1 ring-emerald-300/30 backdrop-blur-xl`}
         style={{ transform: `translateX(-50%) scale(${scale})`, transformOrigin: "bottom center" }}
       >
         <div className="mb-2 flex items-center justify-between">
@@ -839,7 +839,7 @@ function SummaryOverlay({
 
   return (
     <div
-      className={`fixed left-1/2 bottom-5 h-[96px] w-[min(1720px,96vw)] -translate-x-1/2 overflow-hidden rounded-[1.5rem] border border-white/10 bg-slate-950/72 text-white shadow-2xl backdrop-blur-sm`}
+      className={`fixed left-1/2 bottom-5 h-[96px] w-[min(1720px,96vw)] -translate-x-1/2 overflow-hidden rounded-[1.5rem] border border-white/10 bg-slate-950/72 text-white shadow-2xl backdrop-blur-xl`}
       style={{ transform: transformFor(position, scale) }}
     >
       <div className="flex h-full items-center">
@@ -885,7 +885,7 @@ function SummaryOverlay({
           </div>
 
           <div className="text-right">
-            <p className="text-[10px] font-bold text-white/65">Updated</p>
+            <p className="text-[10px] font-bold text-white/45">Updated</p>
             <p className="text-[14px] font-black leading-tight text-white">{updated}</p>
           </div>
         </div>
@@ -1321,7 +1321,7 @@ export default function CricketScoreOverlay({
 
   if (!current) {
     return (
-      <div className="fixed bottom-8 left-1/2 w-[min(900px,calc(100vw-80px))] -translate-x-1/2 rounded-3xl bg-slate-950/80 px-8 py-5 text-white shadow-2xl ring-1 ring-white/10 backdrop-blur-sm">
+      <div className="fixed bottom-8 left-1/2 w-[min(900px,calc(100vw-80px))] -translate-x-1/2 rounded-3xl bg-slate-950/80 px-8 py-5 text-white shadow-2xl ring-1 ring-white/10 backdrop-blur-xl">
         <p className="text-lg font-black">CCE LIVE OVERLAY</p>
         <p className="mt-1 text-sm text-white/60">Waiting for STUMPS scorecard or match summary...</p>
       </div>
@@ -1332,7 +1332,7 @@ export default function CricketScoreOverlay({
     return (
       <>
         <div
-          className={`fixed ${posClass(position, effectiveScene)} w-[420px] rounded-[1.4rem] bg-slate-950/84 p-4 text-white shadow-2xl ring-1 ring-emerald-300/30 backdrop-blur-sm`}
+          className={`fixed ${posClass(position, effectiveScene)} w-[420px] rounded-[1.4rem] bg-slate-950/84 p-4 text-white shadow-2xl ring-1 ring-emerald-300/30 backdrop-blur-xl`}
           style={{ transform: transformFor(position, safeScale) }}
         >
           <div className="mb-2 flex items-center justify-between">
@@ -1353,7 +1353,7 @@ export default function CricketScoreOverlay({
             <p className="text-lg font-black text-emerald-300">{overs(current)}</p>
           </div>
           {previous ? (
-            <p className="mt-2 text-sm font-bold text-white/85">
+            <p className="mt-2 text-sm font-bold text-white/70">
               {previous.battingTeamName}: {score(previous)} {overs(previous)}
             </p>
           ) : null}
@@ -1368,7 +1368,7 @@ export default function CricketScoreOverlay({
   return (
     <>
       <div
-        className={`fixed ${posClass(position, effectiveScene)} h-[110px] w-[min(1500px,calc(100vw-40px))] animate-[scorebarGlow_3s_ease-in-out_infinite] overflow-hidden rounded-[1.5rem] border border-white/10 bg-slate-950/72 text-white shadow-2xl backdrop-blur-sm`}
+        className={`fixed ${posClass(position, effectiveScene)} h-[110px] w-[min(1500px,calc(100vw-40px))] animate-[scorebarGlow_3s_ease-in-out_infinite] overflow-hidden rounded-[1.5rem] border border-white/10 bg-slate-950/72 text-white shadow-2xl backdrop-blur-xl`}
         style={{ transform: transformFor(position, safeScale) }}
       >
         <div className="flex h-full items-center">
@@ -1447,17 +1447,17 @@ export default function CricketScoreOverlay({
 
               <div className="grid w-[270px] grid-cols-3 gap-2 px-3">
                 <div className="rounded-xl bg-white/6 px-3 py-2 text-center">
-                  <p className="text-[9px] font-black uppercase tracking-[0.15em] text-white/65">CRR</p>
+                  <p className="text-[9px] font-black uppercase tracking-[0.15em] text-white/45">CRR</p>
                   <p className="text-[15px] font-black text-white">{currentRunRate(current)}</p>
                 </div>
                 <div className="rounded-xl bg-white/6 px-3 py-2 text-center">
-                  <p className="text-[9px] font-black uppercase tracking-[0.15em] text-white/65">{previous ? "Need" : "Proj"}</p>
+                  <p className="text-[9px] font-black uppercase tracking-[0.15em] text-white/45">{previous ? "Need" : "Proj"}</p>
                   <p className="text-[15px] font-black text-emerald-300">
                     {previous ? Math.max(0, Number(previous.teamScore || 0) + 1 - Number(current.teamScore || 0)) : projectedScore(current, matchFormat)}
                   </p>
                 </div>
                 <div className="rounded-xl bg-white/6 px-3 py-2 text-center">
-                  <p className="text-[9px] font-black uppercase tracking-[0.15em] text-white/65">Format</p>
+                  <p className="text-[9px] font-black uppercase tracking-[0.15em] text-white/45">Format</p>
                   <p className="text-[15px] font-black text-white">{matchFormat || "-"}</p>
                 </div>
               </div>
