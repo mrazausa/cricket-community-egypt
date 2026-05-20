@@ -1,5 +1,33 @@
 "use client";
 
+function inferStriker(
+  batters: any[],
+  manualStriker?: string | null
+) {
+  if (!batters?.length) return -1;
+
+  if (manualStriker) {
+    const idx = batters.findIndex((b) =>
+      String(b?.playerName || "")
+        .toLowerCase()
+        .includes(manualStriker.toLowerCase())
+    );
+
+    if (idx >= 0) return idx;
+  }
+
+  const strikerFromApi = batters.findIndex(
+    (b) => b?.isStriker === true || b?.striker === true
+  );
+
+  if (strikerFromApi >= 0) return strikerFromApi;
+
+  if (batters.length < 2) return 0;
+
+  return batters[0]?.balls >= batters[1]?.balls ? 0 : 1;
+}
+
+
 import { useEffect, useMemo, useRef, useState } from "react";
 
 type Batter = {
@@ -100,6 +128,8 @@ type BatterPairSnapshot = {
   names: string[];
   runs: number[];
   balls: number[];
+  inningsBalls?: number;
+  overs?: string;
   strikerIndex: number;
 };
 
@@ -237,11 +267,19 @@ function currentLiveInnings(list?: Innings[]) {
   const innings = Array.isArray(list) ? list : [];
   if (!innings.length) return undefined;
 
-  // STUMPS sometimes sends inning 2 as a blank placeholder during inning 1.
-  // Never pick that blank last inning. Pick the most useful innings with real score/players.
-  return [...innings]
-    .filter((i) => usefulInningsScore(i) > 0)
-    .sort((a, b) => usefulInningsScore(b) - usefulInningsScore(a))[0] || innings[0];
+  // IMPORTANT:
+  // Do NOT sort by highest score. In 2nd innings the 1st innings score is usually higher,
+  // so sorting by score keeps showing old innings.
+  // Pick the latest innings that has actually started.
+  const started = innings.filter((i) => {
+    const balls = oversToBalls(i?.overs);
+    const score = Number(i?.teamScore || 0);
+    const batters = Array.isArray(i?.battingPlayers) ? i.battingPlayers.length : 0;
+    const bowlers = Array.isArray(i?.bowlingPlayers) ? i.bowlingPlayers.length : 0;
+    return balls > 0 || score > 0 || batters > 0 || bowlers > 0;
+  });
+
+  return started[started.length - 1] || innings[0];
 }
 
 function formatOversFrom(matchFormat?: string, fallback = 20) {
@@ -317,11 +355,20 @@ function TeamLogo({
   );
 }
 
-function BatterLine({ p }: { p?: Batter; isStriker?: boolean }) {
+function BatterLine({ p, isStriker }: { p?: Batter; isStriker?: boolean }) {
   const name = p?.playerName || "Batter";
   return (
-    <div className="flex h-[31px] items-center justify-between rounded-xl bg-white/10 px-3 transition-all">
-      <span className="truncate text-[14px] font-black text-white">{name}</span>
+    <div
+      className={`flex h-[31px] items-center justify-between rounded-xl px-3 transition-all ${
+        isStriker
+          ? "bg-amber-400/25 ring-2 ring-amber-300/80 shadow-[0_0_18px_rgba(251,191,36,0.28)]"
+          : "bg-white/10"
+      }`}
+    >
+      <span className="truncate text-[14px] font-black text-white">
+        {isStriker ? <span className="mr-1 text-amber-300">★</span> : null}
+        {name}
+      </span>
       <span className="shrink-0 pl-2 text-[14px] font-black text-emerald-300">
         {p?.runs ?? "-"}
         <span className="text-white/60">({p?.balls ?? "-"})</span>
@@ -699,7 +746,7 @@ function OverPopup({
         </div>
         <div className="rounded-2xl bg-white/6 px-5 py-3 text-center">
           <p className="text-[10px] font-black uppercase tracking-[0.22em] text-white/45">Wickets</p>
-          <p className="mt-1 text-3xl font-black text-red-300">{data?.wickets ?? 0}</p>
+          <p className="mt-1 text-3xl font-black text-red-300">{current?.wickets ?? data?.score?.split("/")?.[1] ?? 0}</p>
         </div>
       </div>
     </div>
@@ -847,6 +894,54 @@ function SummaryOverlay({
   );
 }
 
+
+function samePlayerNameForOverride(a?: string | null, b?: string | null) {
+  const clean = (v?: string | null) =>
+    String(v || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "")
+      .trim();
+
+  const aa = clean(a);
+  const bb = clean(b);
+
+  return Boolean(aa && bb && (aa === bb || aa.includes(bb) || bb.includes(aa)));
+}
+
+
+function inningsCompletedForBreak(i?: Innings, matchFormat?: string) {
+  if (!i) return false;
+
+  const balls = oversToBalls(i.overs);
+  const oversText = String(i.overs || "");
+  const isExactOver = balls > 0 && balls % 6 === 0;
+  const wickets = Number(i.wickets || 0);
+
+  // Strong signal: all out.
+  if (wickets >= 10) return true;
+
+  // Strong signal: scorecard status/format max overs reached.
+  const maxOvers = formatOversFrom(matchFormat, 0);
+  if (maxOvers > 0 && balls >= maxOvers * 6) return true;
+
+  // Practical local cricket fallback:
+  // Some STUMPS feeds keep matchFormat as T10 even when match is configured differently.
+  // If inning is on an exact over and has reached 10+ overs with a blank second innings,
+  // treat it as an innings-break candidate.
+  return isExactOver && balls >= 60;
+}
+
+function isBlankInnings(i?: Innings) {
+  if (!i) return true;
+
+  const score = Number(i.teamScore || 0);
+  const balls = oversToBalls(i.overs);
+  const batters = Array.isArray(i.battingPlayers) ? i.battingPlayers.length : 0;
+  const bowlers = Array.isArray(i.bowlingPlayers) ? i.bowlingPlayers.length : 0;
+
+  return score === 0 && balls === 0 && batters === 0 && bowlers === 0;
+}
+
 export default function CricketScoreOverlay({
   matchId,
   scene = "auto",
@@ -873,7 +968,31 @@ export default function CricketScoreOverlay({
   const overTimerRef = useRef<number | null>(null);
   const eventTimerRef = useRef<number | null>(null);
   const prevBattersRef = useRef<BatterPairSnapshot | null>(null);
+  const appliedManualStrikerRef = useRef<string | null>(null);
   const [strikerIndex, setStrikerIndex] = useState(0);
+
+  const [manualStrikerOverride, setManualStrikerOverride] = useState<string | null>(null);
+
+  useEffect(() => {
+    const readManualStrikerOverride = () => {
+      try {
+        const value = window.localStorage.getItem(`cce_striker_override_${matchId}`);
+        setManualStrikerOverride(value || null);
+      } catch {
+        setManualStrikerOverride(null);
+      }
+    };
+
+    readManualStrikerOverride();
+
+    const timer = window.setInterval(readManualStrikerOverride, 700);
+    window.addEventListener("storage", readManualStrikerOverride);
+
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("storage", readManualStrikerOverride);
+    };
+  }, [matchId]);
 
   const safeScale = clampScale(scale);
   const effectiveScene: Scene = scene === "auto" ? "live" : scene;
@@ -921,34 +1040,49 @@ export default function CricketScoreOverlay({
 
   function updateStrikerFromBatters(i?: Innings) {
     const bats = activeBatters(i);
+
     if (bats.length < 2) {
       setStrikerIndex(0);
       return;
     }
 
-    const url = new URL(window.location.href);
-    const forcedStriker = url.searchParams.get("striker")?.trim().toLowerCase();
-    if (forcedStriker) {
-      const forcedIndex = bats.findIndex((b) =>
-        String(b?.playerName || "").toLowerCase().includes(forcedStriker)
-      );
-      if (forcedIndex >= 0) {
-        setStrikerIndex(forcedIndex);
-        return;
-      }
-    }
-
     const storageKey = `cce_overlay_striker_${matchId}`;
-    const prev = prevBattersRef.current || (() => {
-      try {
-        const raw = window.localStorage.getItem(storageKey);
-        return raw ? (JSON.parse(raw) as BatterPairSnapshot) : null;
-      } catch {
-        return null;
-      }
-    })();
+    const manualKey = `cce_striker_override_${matchId}`;
 
-    let nextIndex = prev?.strikerIndex ?? inferInitialStrikerIndex(bats, i);
+    let manualName = "";
+    try {
+      manualName = window.localStorage.getItem(manualKey)?.trim() || "";
+    } catch {}
+
+    const url = new URL(window.location.href);
+    const urlForced = url.searchParams.get("striker")?.trim() || "";
+    if (urlForced) manualName = urlForced;
+
+    const manualIndex = manualName
+      ? bats.findIndex((b) => samePlayerNameForOverride(b?.playerName, manualName))
+      : -1;
+
+    const manualChanged =
+      manualName &&
+      manualIndex >= 0 &&
+      appliedManualStrikerRef.current !== manualName;
+
+    const prev = manualChanged
+      ? null
+      : prevBattersRef.current ||
+        (() => {
+          try {
+            const raw = window.localStorage.getItem(storageKey);
+            return raw ? (JSON.parse(raw) as BatterPairSnapshot) : null;
+          } catch {
+            return null;
+          }
+        })();
+
+    let nextIndex =
+      manualChanged && manualIndex >= 0
+        ? manualIndex
+        : prev?.strikerIndex ?? inferInitialStrikerIndex(bats, i);
 
     const samePair =
       prev &&
@@ -966,53 +1100,62 @@ export default function CricketScoreOverlay({
 
       if (facedList.length === 1) {
         const faced = facedList[0];
-        const totalBalls = oversToBalls(i?.overs);
-        const isOverEnd = totalBalls > 0 && totalBalls % 6 === 0;
 
-        // After a legal delivery:
-        // odd run rotates strike; even/dot keeps same striker.
-        nextIndex = faced.runDiff % 2 !== 0 ? (faced.idx === 0 ? 1 : 0) : faced.idx;
+        // The batter whose ball count increased faced the last legal ball.
+        // After 0/2/4/6 he remains on strike; after 1/3/5 strike rotates.
+        nextIndex = Math.abs(faced.runDiff) % 2 === 1 ? (faced.idx === 0 ? 1 : 0) : faced.idx;
 
-        // Over end rotates strike again.
-        if (isOverEnd) nextIndex = nextIndex === 0 ? 1 : 0;
+        const prevInningsBalls =
+          typeof prev.inningsBalls === "number"
+            ? prev.inningsBalls
+            : oversToBalls(prev.overs);
+
+        const currentInningsBalls = oversToBalls(i?.overs);
+
+        // If a legal over has completed after this delivery, rotate again.
+        // IMPORTANT: use innings overs, not only active batsmen balls.
+        // Active batsmen balls reset after wickets, so over-end was failing.
+        if (
+          currentInningsBalls > prevInningsBalls &&
+          currentInningsBalls > 0 &&
+          currentInningsBalls % 6 === 0
+        ) {
+          nextIndex = nextIndex === 0 ? 1 : 0;
+        }
       } else if (facedList.length > 1) {
-        // Polling missed multiple deliveries. Use the batter whose ball count changed last most likely:
-        // choose the batter with the highest ballDiff; if tied, use STUMPS active order.
+        // If polling missed multiple deliveries, the safest visible striker is the latest
+        // batsman whose balls changed most. This is not perfect without ball-by-ball API,
+        // but better than locking the manual striker forever.
         const sorted = [...facedList].sort((a, b) => {
-          const byBalls = b.ballDiff - a.ballDiff;
-          if (byBalls !== 0) return byBalls;
+          const byBall = b.ballDiff - a.ballDiff;
+          if (byBall !== 0) return byBall;
           return b.runDiff - a.runDiff;
         });
+
         nextIndex = sorted[0]?.idx ?? nextIndex;
       }
-    } else if (prev) {
-      // New batsman came in after wicket. Preserve striker if the old striker is still present,
-      // otherwise new batsman is usually on strike after wicket.
+    } else if (prev && !manualChanged) {
+      // Batting pair changed, usually due to wicket.
       const oldStrikerName = prev.names[prev.strikerIndex];
       const carriedIndex = bats.findIndex((b) => (b?.playerName || "") === oldStrikerName);
       nextIndex = carriedIndex >= 0 ? carriedIndex : 1;
     }
 
-    // Extra sanity from scorecard live feed:
-    // If one batsman has just 1 ball and the other has a long innings, and total balls just advanced,
-    // the new/low-ball batter is often the striker after a wicket/rotation.
-    // Do not override strong delta history except on fresh load.
-    if (!prev) {
-      const b0Balls = Number(bats[0]?.balls || 0);
-      const b1Balls = Number(bats[1]?.balls || 0);
-      if (Math.abs(b0Balls - b1Balls) >= 8) {
-        nextIndex = b0Balls < b1Balls ? 0 : 1;
-      }
+    if (manualChanged) {
+      appliedManualStrikerRef.current = manualName;
     }
 
     const snapshot: BatterPairSnapshot = {
       names: [bats[0]?.playerName || "", bats[1]?.playerName || ""],
       runs: [Number(bats[0]?.runs || 0), Number(bats[1]?.runs || 0)],
       balls: [Number(bats[0]?.balls || 0), Number(bats[1]?.balls || 0)],
+      inningsBalls: oversToBalls(i?.overs),
+      overs: i?.overs || "",
       strikerIndex: nextIndex,
     };
 
     prevBattersRef.current = snapshot;
+
     try {
       window.localStorage.setItem(storageKey, JSON.stringify(snapshot));
     } catch {}
@@ -1089,6 +1232,7 @@ export default function CricketScoreOverlay({
       if (scorecard && innings.length > 0) {
         setData(scorecard);
         detectAutomaticScenes(current);
+        updateStrikerFromBatters(current);
       } else {
         setData(scorecard);
       }
@@ -1124,6 +1268,19 @@ export default function CricketScoreOverlay({
   const battingLogo = findLogoForTeam(summaryMatch, current?.battingTeamName);
   const bowlingLogo = findLogoForTeam(summaryMatch, current?.bowlingTeamName);
   const matchFormat = data?.matchFormat || summaryMatch?.matchFormat || "";
+
+  const isCompleted =
+    String(data?.matchStatus || "").toLowerCase().includes("completed") || Boolean(data?.matchResult);
+
+  const firstInnings = innings[0];
+  const secondInnings = innings[1];
+  const inningsBreak =
+    current === firstInnings &&
+    inningsCompletedForBreak(firstInnings, matchFormat) &&
+    isBlankInnings(secondInnings) &&
+    !isCompleted;
+
+  const inningsBreakTarget = Number(firstInnings?.teamScore || 0) + 1;
 
   const currentBallsForPopup = oversToBalls(current?.overs);
   const overPopupAge = overPopup ? Date.now() - overPopup.shownAt : Number.POSITIVE_INFINITY;
@@ -1170,9 +1327,6 @@ export default function CricketScoreOverlay({
       </div>
     );
   }
-
-  const isCompleted =
-    String(data?.matchStatus || "").toLowerCase().includes("completed") || Boolean(data?.matchResult);
 
   if (effectiveScene === "scorebug") {
     return (
@@ -1248,33 +1402,67 @@ export default function CricketScoreOverlay({
             </div>
           </div>
 
-          <div className="grid w-[340px] gap-2 px-3">
-            <BatterLine p={batters[0]} />
-            <BatterLine p={batters[1]} />
-          </div>
+          {inningsBreak ? (
+            <div className="grid w-[870px] grid-cols-[1.15fr_0.8fr_1fr] gap-3 px-3">
+              <div className="rounded-2xl bg-white/8 px-5 py-3">
+                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-amber-300">Innings Break</p>
+                <p className="mt-1 truncate text-[18px] font-black text-white">
+                  {firstInnings?.battingTeamName || "First innings"} finished
+                </p>
+                <p className="text-[12px] font-bold text-white/60">
+                  {score(firstInnings)} in {overs(firstInnings)}
+                </p>
+              </div>
 
-          <div className="w-[260px] rounded-2xl bg-white/6 px-4 py-3">
-            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-300">Bowler</p>
-            <p className="mt-1 truncate text-[17px] font-black">{bowler?.playerName || "Bowler update soon"}</p>
-            <p className="text-[12px] font-bold text-white/60">
-              {bowler?.overs || "0"} ov • {bowler?.runsConceded ?? 0}/{bowler?.wickets ?? 0}
-            </p>
-          </div>
+              <div className="rounded-2xl bg-emerald-400/16 px-5 py-3 text-center ring-1 ring-emerald-300/25">
+                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-300">Target</p>
+                <p className="mt-1 text-[28px] font-black leading-none text-white">{inningsBreakTarget}</p>
+                <p className="text-[11px] font-bold text-white/60">to win</p>
+              </div>
 
-          <div className="grid w-[270px] grid-cols-3 gap-2 px-3">
-            <div className="rounded-xl bg-white/6 px-3 py-2 text-center">
-              <p className="text-[9px] font-black uppercase tracking-[0.15em] text-white/45">CRR</p>
-              <p className="text-[15px] font-black text-white">{currentRunRate(current)}</p>
+              <div className="rounded-2xl bg-white/8 px-5 py-3">
+                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-cyan-300">Next Innings</p>
+                <p className="mt-1 truncate text-[18px] font-black text-white">
+                  {firstInnings?.bowlingTeamName || "Chasing team"}
+                </p>
+                <p className="text-[12px] font-bold text-white/60">
+                  need {inningsBreakTarget} runs
+                </p>
+              </div>
             </div>
-            <div className="rounded-xl bg-white/6 px-3 py-2 text-center">
-              <p className="text-[9px] font-black uppercase tracking-[0.15em] text-white/45">Proj</p>
-              <p className="text-[15px] font-black text-emerald-300">{projectedScore(current, matchFormat)}</p>
-            </div>
-            <div className="rounded-xl bg-white/6 px-3 py-2 text-center">
-              <p className="text-[9px] font-black uppercase tracking-[0.15em] text-white/45">Format</p>
-              <p className="text-[15px] font-black text-white">{matchFormat || "-"}</p>
-            </div>
-          </div>
+          ) : (
+            <>
+              <div className="grid w-[340px] gap-2 px-3">
+                <BatterLine p={batters[0]} isStriker={strikerIndex === 0} />
+                <BatterLine p={batters[1]} isStriker={strikerIndex === 1} />
+              </div>
+
+              <div className="w-[260px] rounded-2xl bg-white/6 px-4 py-3">
+                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-emerald-300">Bowler</p>
+                <p className="mt-1 truncate text-[17px] font-black">{bowler?.playerName || "Bowler update soon"}</p>
+                <p className="text-[12px] font-bold text-white/60">
+                  {bowler?.overs || "0"} ov • {bowler?.runsConceded ?? 0}/{bowler?.wickets ?? 0}
+                </p>
+              </div>
+
+              <div className="grid w-[270px] grid-cols-3 gap-2 px-3">
+                <div className="rounded-xl bg-white/6 px-3 py-2 text-center">
+                  <p className="text-[9px] font-black uppercase tracking-[0.15em] text-white/45">CRR</p>
+                  <p className="text-[15px] font-black text-white">{currentRunRate(current)}</p>
+                </div>
+                <div className="rounded-xl bg-white/6 px-3 py-2 text-center">
+                  <p className="text-[9px] font-black uppercase tracking-[0.15em] text-white/45">{previous ? "Need" : "Proj"}</p>
+                  <p className="text-[15px] font-black text-emerald-300">
+                    {previous ? Math.max(0, Number(previous.teamScore || 0) + 1 - Number(current.teamScore || 0)) : projectedScore(current, matchFormat)}
+                  </p>
+                </div>
+                <div className="rounded-xl bg-white/6 px-3 py-2 text-center">
+                  <p className="text-[9px] font-black uppercase tracking-[0.15em] text-white/45">Format</p>
+                  <p className="text-[15px] font-black text-white">{matchFormat || "-"}</p>
+                </div>
+              </div>
+            </>
+          )}
 
           <div className="flex h-full w-[180px] items-center justify-end gap-3 bg-gradient-to-l from-rose-700/90 via-rose-800/45 to-transparent px-4 text-right">
             <div className="min-w-0">
@@ -1289,7 +1477,7 @@ export default function CricketScoreOverlay({
         </div>
       </div>
 
-      <OverPopup data={popupForRender} scale={safeScale} current={current} batters={batters} bowler={bowler} />
+      <OverPopup data={inningsBreak ? null : popupForRender} scale={safeScale} current={current} batters={batters} bowler={bowler} />
       <EventGraphic event={visibleEvent} />
 
       <style jsx global>{`
